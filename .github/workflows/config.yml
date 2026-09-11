@@ -17,6 +17,7 @@ jobs:
           - DOCKER_IMAGE: ubuntu:bionic
           - DOCKER_IMAGE: ubuntu:focal
           - DOCKER_IMAGE: debian:stretch
+          - DOCKER_IMAGE: debian:sid
           - DOCKER_IMAGE: ubuntu:trusty
             ROS_DISTRO: indigo
           - DOCKER_IMAGE: ubuntu:xenial
@@ -27,19 +28,10 @@ jobs:
             ROS_DISTRO: noetic
           - DOCKER_IMAGE: osrf/ubuntu_armhf:trusty
           - DOCKER_IMAGE: osrf/ubuntu_armhf:xenial
-          - DOCKER_IMAGE: osrf/ubuntu_arm64:trusty
-          - DOCKER_IMAGE: osrf/ubuntu_arm64:xenial
-          - QEMU: aarch64
-            DOCKER_IMAGE: arm64v8/ubuntu:bionic
-          - QEMU: aarch64
-            DOCKER_IMAGE: arm64v8/ubuntu:focal
-          - DOCKER_IMAGE: osrf/debian_arm64:stretch
           - DOCKER_IMAGE: amd64/debian:unstable
             #
           - QEMU: amd64
             DOCKER_IMAGE: amd64/debian:unstable # amd64
-          - QEMU: aarch64
-            DOCKER_IMAGE: arm64v8/debian:buster # arm64
           - QEMU: arm
             DOCKER_IMAGE: arm32v5/debian:jessie # armel
           - QEMU: arm
@@ -52,8 +44,9 @@ jobs:
             DOCKER_IMAGE: i386/debian:buster # i386
             # ia64
             # m68k
-          - QEMU: mips64el
-            DOCKER_IMAGE: loongnix/debian:buster # mips64el
+          # - QEMU: mips64el
+          #   DOCKER_IMAGE: loongnix/debian:buster # --platform is mips64le but qemu is mips64el
+            # mips64el is dropped https://github.com/debuerreotype/docker-debian-artifacts/issues/170
             # mipsel
           # - QEMU: ppc
           #   DOCKER_IMAGE: vicamo/debian:unstable-powerpc # powerpc / somehow failing loading eusgl
@@ -89,19 +82,82 @@ jobs:
           if [[ "$QEMU" != "" ]]; then docker run --rm --privileged multiarch/qemu-user-static:register --reset; fi
           if [[ "$DOCKER_IMAGE" == *"arm"* ]]; then sudo apt-get install -y -qq qemu-user-static; fi
           if [[ "$DOCKER_IMAGE" == *"arm"* ]]; then git clone http://github.com/euslisp/jskeus ${HOME}/jskeus; fi
+          if [[ "$QEMU" != "" ]]; then export PLATFORM_OPTION="--platform linux/$QEMU"; fi
+          if [[ "$QEMU" == "mips64el" ]]; then export PLATFORM_OPTION="--platform linux/mips64le"; fi
           echo "Testing branch $TRAVIS_BRANCH of $REPOSITORY_NAME on $QEMU_VOLUME"
-          docker run --rm $QEMU_VOLUME -v $HOME:$HOME -e "QEMU=$QEMU" -e "TRAVIS_OS_NAME=$TRAVIS_OS_NAME" -e "CI_SOURCE_PATH=$CI_SOURCE_PATH" -e "HOME=$HOME" -e "MAKEFLAGS=$MAKEFLAGS" -e "DOCKER_IMAGE=$DOCKER_IMAGE" -t $DOCKER_IMAGE sh -c "cd $CI_SOURCE_PATH; ./.travis.sh"
+          docker run $PLATFORM_OPTION --rm $QEMU_VOLUME -v $HOME:$HOME -e "QEMU=$QEMU" -e "TRAVIS_OS_NAME=$TRAVIS_OS_NAME" -e "CI_SOURCE_PATH=$CI_SOURCE_PATH" -e "HOME=$HOME" -e "MAKEFLAGS=$MAKEFLAGS" -e "DOCKER_IMAGE=$DOCKER_IMAGE" -t $DOCKER_IMAGE sh -c "cd $CI_SOURCE_PATH; ./.travis.sh"
+
+  linux-arm:
+    strategy:
+      matrix:
+        include:
+          - DOCKER_IMAGE: arm64v8/ubuntu:jammy
+          - DOCKER_IMAGE: arm64v8/ubuntu:noble
+          - DOCKER_IMAGE: arm32v5/debian:sid
+          - DOCKER_IMAGE: arm32v7/debian:sid
+          - DOCKER_IMAGE: arm64v8/debian:sid
+      fail-fast: false
+
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+
+    name: linux-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Run test
+        shell: bash
+        run: |
+          set -x
+          export CI_SOURCE_PATH=$(pwd)
+          export REPOSITORY_NAME=${PWD##*/}
+          export TRAVIS_BRANCH=${GITHUB_REF#refs/heads/}
+          export TRAVIS_OS_NAME=linux
+          export DOCKER_IMAGE=${{matrix.DOCKER_IMAGE}}
+          export ROS_DISTRO=${{matrix.ROS_DISTRO}}
+          export QEMU=${{matrix.QEMU}}
+          export MAKEFLAGS="-j4"
+          git clone http://github.com/euslisp/jskeus ${HOME}/jskeus
+          echo "Testing branch $TRAVIS_BRANCH of $REPOSITORY_NAME on $QEMU_VOLUME"
+          docker run --rm $QEMU_VOLUME -v $HOME:$HOME -e "TRAVIS_OS_NAME=$TRAVIS_OS_NAME" -e "CI_SOURCE_PATH=$CI_SOURCE_PATH" -e "HOME=$HOME" -e "MAKEFLAGS=$MAKEFLAGS" -e "DOCKER_IMAGE=$DOCKER_IMAGE" -t $DOCKER_IMAGE sh -c "cd $CI_SOURCE_PATH; ./.travis.sh"
 
   debian-unstable:
     strategy:
       matrix:
         include:
           - DOCKER_IMAGE: amd64/debian:unstable-slim
+            DOCKER_PLATFORM: amd64
+            ARCH: Linux64
+            EXPERIMENTAL: true
+          - DOCKER_IMAGE: i386/debian:unstable-slim
+            DOCKER_PLATFORM: i386
+            ARCH: Linux
+            EXPERIMENTAL: true
+          - DOCKER_IMAGE: arm32v7/debian:unstable-slim
+            DOCKER_PLATFORM: arm
+            ARCH: LinuxARM
+            EXPERIMENTAL: true
+          - DOCKER_IMAGE: arm64v8/debian:unstable-slim
+            DOCKER_PLATFORM: aarch64
+            ARCH: LinuxARM
+            EXPERIMENTAL: true
+          - DOCKER_IMAGE: amd64/debian:unstable-slim
+            DOCKER_PLATFORM: amd64
             ARCH: Linux64
           - DOCKER_IMAGE: arm32v7/debian:unstable-slim
+            DOCKER_PLATFORM: arm
             ARCH: LinuxARM
           - DOCKER_IMAGE: arm64v8/debian:unstable-slim
+            DOCKER_PLATFORM: aarch64
             ARCH: LinuxARM
+          - DOCKER_IMAGE: s390x/debian:unstable-slim
+            DOCKER_PLATFORM: s390x
+            ARCH: Linux
+          - DOCKER_IMAGE: riscv64/debian:unstable-slim
+            DOCKER_PLATFORM: riscv64
+            ARCH: Linux
+      fail-fast: false
 
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -119,23 +175,52 @@ jobs:
           sudo apt update -qq
           # Install the qemu packages
           # This step will execute the registering scripts
-          if [[ "$DOCKER_IMAGE" == *"arm"* ]]; then \
-            sudo apt install -y -qq qemu binfmt-support qemu-user-static; \
-            docker run --rm --privileged multiarch/qemu-user-static --reset -p yes; \
-          fi
-          docker run --rm -v $(pwd):/ws/euslisp -e "ARCH=$ARCH" -t "$DOCKER_IMAGE" bash -c "set -x; set -e; apt update -qq; apt install -y -qq make gcc libgl-dev libglu1-mesa-dev libjpeg-dev libpng-dev libpq-dev libx11-dev libxext-dev; ARCH=$ARCH EUSDIR=/ws/euslisp make -C /ws/euslisp/lisp/ -f Makefile.$ARCH eus0; CC='gcc -Werror' ARCHDIR=$ARCH EUSDIR=/ws/euslisp make -C /ws/euslisp/lisp/image/jpeg; exit 0"
+          sudo apt install -y -qq qemu-system binfmt-support qemu-user-static
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          docker run --rm --platform linux/${{matrix.DOCKER_PLATFORM}} -v $(pwd):/ws/euslisp -e "ARCH=$ARCH" -t "$DOCKER_IMAGE" \
+            bash -c " \
+               set -x; set -e; \
+               [[ \"${{matrix.EXPERIMENTAL}}\" != \"true\" ]] || echo \"deb http://deb.debian.org/debian experimental main\" | tee -a /etc/apt/sources.list; \
+               apt update -qq; \
+               [[ \"${{matrix.EXPERIMENTAL}}\" != \"true\" ]] || apt -t=experimental -y -qq install g++ gcc; \
+               apt install -y -qq make gcc libgl-dev libglu1-mesa-dev libjpeg-dev libpng-dev libpq-dev libx11-dev libxext-dev; \
+               export GNUMAKEFLAGS='--trace --shuffle=reverse'; \
+               CFLAGS='-Werror=implicit-function-declaration' ARCH=$ARCH EUSDIR=/ws/euslisp make -C /ws/euslisp/lisp/ -f Makefile.$ARCH eus0; \
+               CC='gcc -Werror' ARCHDIR=$ARCH EUSDIR=/ws/euslisp make -C /ws/euslisp/lisp/image/jpeg; \
+               if [[ \"$DOCKER_IMAGE\" =~ (\"arm\"|\"s390x\") ]]; then exit 0; fi ; \
+               CFLAGS='-Werror=implicit-function-declaration' ARCH=$ARCH EUSDIR=/ws/euslisp make -C /ws/euslisp/lisp/ -f Makefile.$ARCH eus0 eus1 eus2 eusg eusx eusgl; \
+               apt install -y -qq curl dpkg-dev; \
+               curl -sLo /usr/local/bin/shunit2 https://raw.githubusercontent.com/kward/shunit2/master/shunit2; \
+               chmod +x /usr/local/bin/shunit2 ; \
+               export ARCHDIR=$ARCH; export EUSDIR=/ws/euslisp; export PATH=\$EUSDIR/\$ARCHDIR/bin:\$PATH; \
+               cd \$EUSDIR; \
+               curl -sLo euslisp-all-test https://salsa.debian.org/science-team/euslisp/-/raw/master/debian/tests/euslisp-all-test; \
+               bash ./euslisp-all-test; \
+               exit 0"
 
   osx:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          # https://github.com/actions/runner-images/tree/main/images/macos
+          # Note: macos-13 is deprecated and will be retired by December 4, 2025
+          # https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/
+          # Using macos-15-intel for Intel x86_64 architecture testing
+          # macos-latest (ARM-based Apple Silicon) for general testing
+          - runs-on: macos-15-intel  # Intel (x64) - replacement for deprecated macos-13
+          - runs-on: macos-14  # ARM64 (Apple Silicon)
+          - runs-on: macos-15  # ARM64 (Apple Silicon)
+      fail-fast: false
+    runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Get brew cache directory
         id: brew-cache
         run: echo "::set-output name=dir::$(brew --cache)/downloads"
       - name: Brew cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ${{ steps.brew-cache.outputs.dir }}
           key: ${{ runner.os }}-${{ hashFiles('.github/workflows/Brewfile') }}
@@ -155,6 +240,7 @@ jobs:
           export LC_CTYPE=C
           (cd ${HOME}; git clone --depth 1 http://github.com/euslisp/jskeus jskeus)
           (cd ${HOME}/jskeus; patch -f -p1 < ${CI_SOURCE_PATH}/.github/workflows/fix-dylib-location.patch || echo "OK")
+          sed -i '.bak' 's/history/_history/' ${CI_SOURCE_PATH}/lisp/l/eusstart.l
           bash -x ./.travis.sh
       - name: Cleanup some brew downloads
         run: cd ${{ steps.brew-cache.outputs.dir }} && ls -lsS | head -n 10 | awk '{ print $10 }' | xargs rm -rf

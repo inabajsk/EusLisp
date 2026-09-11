@@ -38,8 +38,8 @@ else
 CC += -fPIC
 endif
 ifeq ($(ARCHDIR), Darwin)
-CC += -I/opt/local/lib/jpeg6b/include -I/opt/local/include
-LD += -L/opt/local/lib/jpeg6b/lib     -L/opt/local/lib
+CC += -I/opt/local/lib/jpeg6b/include -I/opt/local/include -I/opt/homebrew/include
+LD += -L/opt/local/lib/jpeg6b/lib     -L/opt/local/lib -L/opt/homebrew/lib
 endif
 ifeq ($(ARCHDIR), LinuxARM)
 CC += -fPIC
@@ -53,11 +53,11 @@ $(LIBDIR)/jpegmemcd.$(LSFX):	$(OBJFILES)
 	$(LD) -fPIC $(LDFLAGS) -o $(LIBDIR)/jpegmemcd.$(LSFX) $(OBJDIR)/jpegmemcd.o $(OBJDIR)/jmemsrc.o $(OBJDIR)/jmemdst.o -ljpeg
 
 $(OBJDIR)/jpegmemcd.o:	jpegmemcd.c
-	$(CC) $(CFLAGS) -c -o $@ $^
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $^
 $(OBJDIR)/jmemsrc.o:	jmemsrc.c
-	$(CC) $(CFLAGS) -c -o $@ $^
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $^
 $(OBJDIR)/jmemdst.o:	jmemdst.c
-	$(CC) $(CFLAGS) -c -o $@ $^
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $^
 clean:
 	rm -f $(OBJFILES) $(LIBDIR)/jpegmemcd.$(LSFX) eusjpeg.c eusjpeg.h
 

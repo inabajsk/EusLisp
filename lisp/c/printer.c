@@ -188,7 +188,7 @@ pointer f;
 { char work[20];
   double absnum,fraction;
   register int i,len,intpart;
-  extern double fabs();
+  extern double fabs(double);
 
   if (num==0.0) writestr(f,(byte *)"0.0",3);
   else {
@@ -225,7 +225,7 @@ int base;
   printnum(ctx,rat->c.ratio.denominator,f,base,0,0);
   }
 
-extern pointer big_minus(), copy_big();
+extern pointer big_minus(pointer), copy_big(pointer);
 
 static void printbig(ctx, big, f, base, field1,field2)
 context *ctx;
@@ -235,7 +235,7 @@ int base, field1,field2;
   eusinteger_t *b, d, sign; long digits=0;
   int i, x;
   int downcase;
-  extern eusinteger_t big_sign(), div_int_big();
+  extern eusinteger_t big_sign(pointer), div_int_big(eusinteger_t,pointer);
 
   downcase=(Spevalof(PRCASE)==K_DOWNCASE);
   sign=big_sign(big);
@@ -296,7 +296,7 @@ context *ctx;
   writestr(f,(byte *)"#<",2);
   printsym(ctx,class->c.cls.name,f);
   writech(f,' ');
-  printhex(obj,f);
+  printhex((int)(intptr_t)obj,f);
   writech(f,'>');}
 
 static void printpkg(p,f)
@@ -359,7 +359,7 @@ int prlevel;
 	  break;
     case ELM_BYTE:
 	  writestr(f,(byte *)"#<bytecode ",11);
-	  printhex(vec,f);
+	  printhex((int)(intptr_t)vec,f);
 	  writech(f,'>');
 	  break;
     case ELM_CHAR:
@@ -385,7 +385,7 @@ int prlevel;
 	  break;
     case ELM_FOREIGN:
 	  writestr(f,(byte *)"#u",2);
-	  printstr(ctx,vecsize(vec),vec->c.ivec.iv[0],f);
+	  printstr(ctx,vecsize(vec),(byte *)vec->c.ivec.iv[0],f);
 	  break;
     default:
 	  if (classof(vec)==C_VECTOR)  writestr(f,(byte *)"#(",2);

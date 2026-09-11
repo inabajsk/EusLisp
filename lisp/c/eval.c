@@ -714,7 +714,11 @@ __asm__ (".align 8\n"
 
 #if aarch64
 __asm__ (".align 8\n"
+#if Darwin
+         "_exec_function_i:\n\t"
+#else
          "exec_function_i:\n\t"
+#endif
 	 "sub	sp, sp, #192\n\t" // 128(8x16) + 64
 	 "stp	x29, x30, [sp, 128]\n\t"
 	 "add	x29, sp, 128\n\t"
@@ -726,18 +730,18 @@ __asm__ (".align 8\n"
 	 // vargv -> stack
 	 "mov	x1, 0\n\t"
 	 "ldr	x2, [x29, 24]\n\t"
-	 "b	.FUNCII_LPCK\n\t"
-	 ".FUNCII_LP:\n\t"
+	 "b	1f\n\t"
+	 "2:\n\t"
 	 "lsl	x0, x1, 3\n\t"
 	 "add	x3, x2, x0\n\t" // vargv[i]
 	 "add	x4, sp, x0\n\t" // stack[i]
 	 "ldr	x0, [x3]\n\t"
 	 "str	x0, [x4]\n\t" // push stack
 	 "add	x1, x1, 1\n\t"
-	 ".FUNCII_LPCK:\n\t"
+	 "1:\n\t"
 	 "ldr	x5, [x29, 32]\n\t"
 	 "cmp	x1, x5\n\t"
-	 "blt	.FUNCII_LP\n\t"
+	 "blt	2b\n\t"
 	 // fargv -> register
 	 "ldr	x0, [x29, 40]\n\t" // fargv
 	 "ldr	d0, [x0]\n\t"
@@ -782,7 +786,11 @@ __asm__ (".align 8\n"
 	 );
 
 __asm__ (".align 8\n"
+#if Darwin
+         "_exec_function_f:\n\t"
+#else
          "exec_function_f:\n\t"
+#endif
 	 "sub	sp, sp, #192\n\t" // 128(8x16) + 64
 	 "stp	x29, x30, [sp, 128]\n\t"
 	 "add	x29, sp, 128\n\t"
@@ -794,18 +802,18 @@ __asm__ (".align 8\n"
 	 // vargv -> stack
 	 "mov	x1, 0\n\t"
 	 "ldr	x2, [x29, 24]\n\t"
-	 "b	.FUNCFF_LPCK\n\t"
-	 ".FUNCFF_LP:\n\t"
+	 "b	3f\n\t"
+	 "4:\n\t"
 	 "lsl	x0, x1, 3\n\t"
 	 "add	x3, x2, x0\n\t" // vargv[i]
 	 "add	x4, sp, x0\n\t" // stack[i]
 	 "ldr	x0, [x3]\n\t"
 	 "str	x0, [x4]\n\t" // push stack
 	 "add	x1, x1, 1\n\t"
-	 ".FUNCFF_LPCK:\n\t"
+	 "3:\n\t"
 	 "ldr	x5, [x29, 32]\n\t"
 	 "cmp	x1, x5\n\t"
-	 "blt	.FUNCFF_LP\n\t"
+	 "blt	4b\n\t"
 	 // fargv -> register
 	 "ldr	x0, [x29, 40]\n\t" // fargv
 	 "ldr	d0, [x0]\n\t"
@@ -995,7 +1003,7 @@ extern int exec_function_f(void (*)(), int *, int *, int, int *);
 	 "ldr	r3, [r7, #60]\n\t"	/* i 			*/	\
 	 /* https://community.arm.com/developer/ip-products/processors/b/processors-ip-blog/posts/function-parameters-on-32-bit-arm */ \
 	 "lsl	r4, r3, #2\n\t"		/* r4 = i * 2		*/	\
-	 "ldr	r1, [r7, #80]\n\t"	/* vargv[0]		*/	\
+	 "ldr	r1, [r7, #16]\n\t"	/* vargv[0]		*/	\
 	 "add	r1, r1, r4\n\t"		/* vargv[i]		*/	\
 	 "add	r2, sp, r4\n\t"		/* stack[i]		*/	\
 	 "ldr	r0, [r1]\n\t"						\
@@ -1042,19 +1050,21 @@ __asm__ (".align 4\n"
 	 ".global exec_function_i\n\t"
 	 ".type	exec_function_i, %function\n"
 	 "exec_function_i:\n\t"
-	 "push	{r7, lr}\n\t"
+	 "push	{r3, r4, r5, r6, r7, lr}\n\t"
 	 "sub	sp, sp, #136\n\t"
 	 "add	r7, sp, #64\n\t"
 	 "str	r0, [r7, #12]\n\t"	// fc
 	 "str	r1, [r7, #8]\n\t"	// iargv
 	 "str	r2, [r7, #4]\n\t"	// fargv
 	 "str	r3, [r7]\n\t"		// vcntr
+	 "ldr	r0, [r7, #96]\n\t"	// get 5th argument (vargv)
+	 "str	r0, [r7, #16]\n\t"	// store vargv to #16
 	 exec_function_asm("FUNCI")
 	 // retval
 	 "adds	r7, r7, #72\n\t"
 	 "mov	sp, r7\n\t"
 	 "@ sp needed	@\n\t"
-	  "pop	{r7, pc}\n\t"
+	  "pop	{r3, r4, r5, r6, r7, pc}\n\t"
 	 ".size	exec_function_i, .-exec_function_i\n\t"
 	 );
 
@@ -1062,13 +1072,15 @@ __asm__ (".align 4\n"
 	 ".global exec_function_f\n\t"
 	 ".type	exec_function_f, %function\n"
 	 "exec_function_f:\n\t"
-	 "push	{r7, lr}\n\t"
+	 "push	{r3, r4, r5, r6, r7, lr}\n\t"
 	 "sub	sp, sp, #136\n\t"
 	 "add	r7, sp, #64\n\t"
 	 "str	r0, [r7, #12]\n\t"	// fc
 	 "str	r1, [r7, #8]\n\t"	// iargv
 	 "str	r2, [r7, #4]\n\t"	// fargv
 	 "str	r3, [r7]\n\t"		// vcntr
+	 "ldr	r0, [r7, #96]\n\t"	// get 5th argument (vargv)
+	 "str	r0, [r7, #16]\n\t"	// store vargv to #16
 	 exec_function_asm("FUNCF")
 	 // retval
 	 "vmov	r0, s0	@ <retval>\n\t"
@@ -1076,7 +1088,7 @@ __asm__ (".align 4\n"
 	 "adds	r7, r7, #72\n\t"
 	 "mov	sp, r7\n\t"
 	 "@ sp needed	@\n\t"
-	  "pop	{r7, pc}\n\t"
+	  "pop	{r3, r4, r5, r6, r7, pc}\n\t"
 	 ".size	exec_function_f, .-exec_function_f\n\t"
 	 );
 
@@ -1111,8 +1123,13 @@ pointer args[];
   double f;
 
   if (code->c.fcode.entry2 != NIL) {
+#if (WORD_SIZE == 64)
     ifunc = (eusinteger_t (*)())((((eusinteger_t)ifunc)&0xffffffff00000000)
       | (intval(code->c.fcode.entry2)&0x00000000ffffffff));
+#else
+    ifunc = (eusinteger_t (*)())((((eusinteger_t)ifunc)&0xffff0000)
+      | (intval(code->c.fcode.entry2)&0x0000ffff));
+#endif
     /* R.Hanai 090726 */
   }
   while (iscons(paramtypes)) {
@@ -1251,7 +1268,7 @@ pointer args[];
   
   if (code->c.fcode.entry2 != NIL) {
 #if (WORD_SIZE == 64)
-    ifunc = (((eusinteger_t)ifunc)&0xffffffff00000000) | (intval(code->c.fcode.entry2)&0x00000000ffffffff);
+    ifunc = (eusinteger_t (*)())((((eusinteger_t)ifunc)&0xffffffff00000000) | (intval(code->c.fcode.entry2)&0x00000000ffffffff));
 #else
     ifunc = (eusinteger_t (*)())((((int)ifunc)&0xffff0000) | (intval(code->c.fcode.entry2)&0x0000ffff));    /* kanehiro's patch 2000.12.13 */
 #endif
@@ -1298,23 +1315,25 @@ pointer args[];
   if (resulttype==K_FLOAT || resulttype==K_FLOAT32) {
     union {
       eusfloat_t f;
-#if __ARM_ARCH==4
+#if __ARM_ARCH==4 || __ARM_ARCH==5
       eusinteger_t i;    // ARM 32bit armel
 #else
       eusfloat_t i;  // Intel 32bit x86
 #endif
     } n;
-#if __ARM_ARCH==4
+#if __ARM_ARCH==4 || __ARM_ARCH==5
+    typedef eusinteger_t ifunc_ret_type;
 #else
+    typedef double ifunc_ret_type;
     eusinteger_t (*tmp_ifunc)() = ifunc;
     double (*ifunc)();
     ifunc=(double (*)())tmp_ifunc;
 #endif
     if (i<=8) 
-      n.i=(*ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
+      n.i=((ifunc_ret_type (*)(eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t))ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
 	         cargv[4],cargv[5],cargv[6],cargv[7]);
     else if (i<=32)
-      n.i=(*ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
+      n.i=((ifunc_ret_type (*)(eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t))ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
 	         cargv[4],cargv[5],cargv[6],cargv[7],
 		 cargv[8],cargv[9],cargv[10],cargv[11],
 	         cargv[12],cargv[13],cargv[14],cargv[15],
@@ -1324,7 +1343,7 @@ pointer args[];
 	         cargv[28],cargv[29],cargv[30],cargv[31]);
 #if (sun3 || sun4 || mips || alpha)
     else if (i>32) 
-      n.i=(*ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
+      n.i=((ifunc_ret_type (*)(eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t))ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
 	         cargv[4],cargv[5],cargv[6],cargv[7],
 		 cargv[8],cargv[9],cargv[10],cargv[11],
 	         cargv[12],cargv[13],cargv[14],cargv[15],
@@ -1349,10 +1368,10 @@ pointer args[];
     return(makeflt(n.f));}
   else {
     if (i<8) 
-      i=(*ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
+      i=((eusinteger_t (*)(eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t))ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
 	       cargv[4],cargv[5],cargv[6],cargv[7]);
     else if (i<=32)
-      i=(*ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
+      i=((eusinteger_t (*)(eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t))ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
 	         cargv[4],cargv[5],cargv[6],cargv[7],
 		 cargv[8],cargv[9],cargv[10],cargv[11],
 	         cargv[12],cargv[13],cargv[14],cargv[15],
@@ -1362,7 +1381,7 @@ pointer args[];
 	         cargv[28],cargv[29],cargv[30],cargv[31]);
 #if (sun3 || sun4 || mips || alpha)
     else if (i>32) 
-      i=(*ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
+      i=((eusinteger_t (*)(eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t,eusinteger_t))ifunc)(cargv[0],cargv[1],cargv[2],cargv[3],
 	         cargv[4],cargv[5],cargv[6],cargv[7],
 		 cargv[8],cargv[9],cargv[10],cargv[11],
 	         cargv[12],cargv[13],cargv[14],cargv[15],
@@ -1411,7 +1430,7 @@ pointer funcode(ctx,func,args,noarg)
 register context *ctx;
 register pointer func,args;
 register int noarg;
-{ register pointer (*subr)();
+{ register pointer (*subr)(context*,int,pointer*);
   register pointer *argp=ctx->vsp;
   register int n=0;
   register eusinteger_t addr;
@@ -1431,7 +1450,7 @@ register int noarg;
 #endif
   }
 #endif
-  subr=(pointer (*)())(addr);
+  subr=(pointer (*)(context*,int,pointer*))(addr);
 #ifdef FUNCODE_DEBUG
   printf( "funcode:func = " ); hoge_print( func );
   printf( "funcode:args = " ); hoge_print( args );
@@ -1447,7 +1466,7 @@ register int noarg;
 		else return((*subr)(ctx,n,argp));}
 	      else if (pisfcode(func))
 		return(call_foreign((eusinteger_t (*)())subr,func,noarg,(pointer *)args));
-	      else return((*subr)(ctx,noarg,args,0));
+	      else return(((pointer (*)(context*,int,pointer,int))subr)(ctx,noarg,args,0));
 	      break;
       case (eusinteger_t)SUBR_MACRO:/* ???? */
 	      if (noarg>=0) error(E_ILLFUNC);
@@ -1458,7 +1477,7 @@ register int noarg;
 	      return(eval(ctx,tmp));
       case (eusinteger_t)SUBR_SPECIAL: /* ???? */
 	      if (noarg>=0) error(E_ILLFUNC);
-	      else return((*subr)(ctx,args));
+	      else return(((pointer (*)(context*,pointer))subr)(ctx,args));
 /*      case (int)SUBR_ENTRY:
 	      func=(*subr)(func);
 	      return(makeint(func)); */
@@ -1476,7 +1495,7 @@ int noarg;
   register struct callframe *vf=(struct callframe *)(ctx->vsp);
   struct specialbindframe *sbfps=ctx->sbindfp;
   register int n=0,i;
-  register pointer (*subr)();
+  register pointer (*subr)(context*,int,pointer*,pointer);
   struct fletframe *oldfletfp=ctx->fletfp, *fenv;
   GC_POINT;
   /* evalhook */
@@ -1524,9 +1543,9 @@ int noarg;
     fn=func;
     if (fn->c.code.subrtype!=SUBR_FUNCTION) error(E_ILLFUNC);
 #if (WORD_SIZE == 64)
-    subr=(pointer (*)())((eusinteger_t)(fn->c.code.entry) & ~3L /*0xfffffffc ????*/);
+    subr=(pointer (*)(context*,int,pointer*,pointer))((eusinteger_t)(fn->c.code.entry) & ~3L /*0xfffffffc ????*/);
 #else
-    subr=(pointer (*)())((eusinteger_t)(fn->c.code.entry) & ~3 /*0xfffffffc ????*/);
+    subr=(pointer (*)(context*,int,pointer*,pointer))((eusinteger_t)(fn->c.code.entry) & ~3 /*0xfffffffc ????*/);
 #endif
 #if ARM
     register eusinteger_t addr;
@@ -1543,7 +1562,7 @@ int noarg;
       addr = addr | (intval(fn->c.code.entry2)&0x0000ffff);
 #endif
     }
-    subr=(pointer (*)())(addr);
+    subr=(pointer (*)(context*,int,pointer*,pointer))(addr);
 #endif
 #if !Solaris2 && !SunOS4_1 && !Linux && !IRIX && !IRIX6 && !alpha && !Cygwin
     if ((char *)subr>maxmemory) {
@@ -1554,7 +1573,7 @@ int noarg;
 	while (iscons(args)) {
 	  vpush(eval(ctx,ccar(args))); args=ccdr(args); n++; GC_POINT;}
 	result=(*subr)(ctx,n,argp,func);}	/*call func with env*/
-      else result=(*subr)(ctx,noarg,args,func);
+      else result=(*subr)(ctx,noarg,(pointer*)args,func);
     /*recover call frame and stack pointer*/
     ctx->vsp=(pointer *)vf;
     ctx->callfp= vf->vlink;

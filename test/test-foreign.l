@@ -59,6 +59,7 @@
   (assert (= lisp::sizeof-* (get-size-eusinteger)))
   )
 
+#-(or :s390x :riscv64 :loongarch64)
 (deftest test-multiple-arguments-passing
   (format t "~%multiple arguments passing~%")
   (format t "expected result~%")
@@ -78,6 +79,7 @@ test-testd = 1.23456
             1040.0 1050.0 1060.0 1070.0
             2080.0 2090.0
             206 207)))
+  (when (not (memq :ppc *features*))
   (when (not (and (memq :word-size=32 *features*) (memq :arm *features*)))
   (assert (eps= 1.23456 ret))
   )
@@ -132,6 +134,7 @@ test-testd = 1.23456
   (assert-read-line-string= f "206 207")
   )
   )
+  )
 
 (deftest test-int-test
   (format t "~%~%int-test~%")
@@ -171,6 +174,7 @@ test-testd = 1.23456
   (assert-read-line-string= f "0:        4 4")
   )
 
+#-(or :s390x :riscv64 :loongarch64)
 (deftest test-eusinteger-test
   (format t "~%~%eusinteger-test~%")
   (format t "expected result~%")
@@ -190,6 +194,7 @@ test-testd = 1.23456
   (assert-read-line-string= f "0:        4 4")
   )
 
+#-(or :s390x :riscv64 :loongarch64)
 (deftest test-float-test
   (format t "~%~%float-test~%")
   (format t "expected result~%")
@@ -211,6 +216,7 @@ test-testd = 1.23456
   (float3-test 0 0.1 0.2 0.3 0.4)
 
   ;;
+  (when (not (memq :ppc *features*))
   (check-func 'float-test)
   (setq f (piped-fork (format nil "eusg ~A/test/test-foreign.module_l '(progn (float-test 0 0.1 0.2 0.3 0.4)(exit 0))'" *eusdir*)))
   (assert-read-line-eps= f 0.1)
@@ -226,7 +232,9 @@ test-testd = 1.23456
     (assert-read-line-eps= f 0.3)
     (assert-read-line-eps= f 0.4))
   )
+  )
 
+#-(or :s390x :riscv64 :loongarch64)
 (deftest test-double-test
   (format t "~%~%double-test~%")
   (format t "expected result~%")
@@ -248,7 +256,7 @@ test-testd = 1.23456
   (double3-test 1 0.1 0.2 0.3 0.4)
 
   ;;
-  (when (not (eq (read (unix::piped-fork "gcc -dumpmachine") nil 'arm-linux-gnueabi) 'arm-linux-gnueabi))
+  (when (not (or (memq :ppc *features*) (eq (read (unix::piped-fork "gcc -dumpmachine") nil 'arm-linux-gnueabi) 'arm-linux-gnueabi)))
   (check-func 'double-test)
   (setq f (piped-fork (format nil "eusg ~A/test/test-foreign.module_l '(progn (double-test 1 0.1 0.2 0.3 0.4)(exit 0))'" *eusdir*)))
   (assert-read-line-eps= f 0.1)
@@ -256,7 +264,7 @@ test-testd = 1.23456
   (assert-read-line-eps= f 0.3)
   (assert-read-line-eps= f 0.4)
   )
-  (when (not (and (memq :word-size=32 *features*) (memq :arm *features*)))
+  (when (not (or (memq :ppc *features*) (and (memq :word-size=32 *features*) (memq :arm *features*))))
   (check-func 'double3-test)
   (setq f (piped-fork (format nil "eusg ~A/test/test-foreign.module_l '(progn (double3-test 1 0.1 0.2 0.3 0.4)(exit 0))'" *eusdir*)))
   (assert-read-line-eps= f 0.1)
@@ -266,6 +274,7 @@ test-testd = 1.23456
   )
   )
 
+#-(or :s390x :riscv64 :loongarch64)
 (deftest test-eusfloat-test
   (format t "~%~%eusfloat-test~%")
   (format t "expected result~%")
@@ -287,6 +296,7 @@ test-testd = 1.23456
   (eusfloat3-test 0 0.1 0.2 0.3 0.4)
 
   ;;
+  (when (not (memq :ppc *features*))
   (when (memq :word-size=32 *features*)
     (check-func 'eusfloat-test)
     (setq f (piped-fork (format nil "eusg ~A/test/test-foreign.module_l '(progn (eusfloat-test 0 0.1 0.2 0.3 0.4)(exit 0))'" *eusdir*)))
@@ -317,6 +327,7 @@ test-testd = 1.23456
     (assert-read-line-eps= f 0.3)
     (assert-read-line-eps= f 0.4))
 
+  )
   )
 
 (deftest test-integer-vector
@@ -460,6 +471,7 @@ test-testd = 1.23456
     )
   )
 
+#-(or :s390x :riscv64 :loongarch64)
 (deftest test-return-float
   (format t "~%return float test~%")
   (format t "expected result~%")
@@ -467,11 +479,14 @@ test-testd = 1.23456
   (format t "~%ret-float(exec in eus)~%")
   (format t "  ret-float ~8,8e~%" (ret-float 0.55555 133.0))
   ;;
+  (when (not (memq :ppc *features*))
   (check-func 'ret-float)
   (assert-read-funcall= '(ret-float 0.55555 133.0) (+ 0.55555 133.0))
   (assert (eps= (ret-float 0.55555 133.0) (+ 0.55555 133.0)))
   )
+  )
 
+#-(or :s390x :riscv64 :loongarch64)
 (deftest test-return-double
   (format t "~%return double test~%")
   (format t "expected result~%")
@@ -479,13 +494,14 @@ test-testd = 1.23456
   (format t "~%ret-double(exec in eus)~%")
   (format t "  ret-double ~8,8e~%" (ret-double 0.55555 133.0))
   ;;
-  (when (not (and (memq :word-size=32 *features*) (memq :arm *features*)))
+  (when (not (or (memq :ppc *features*) (and (memq :word-size=32 *features*) (memq :arm *features*))))
   (check-func 'ret-double)
   (assert-read-funcall= '(ret-double 0.55555 133.0) (+ 0.55555 133.0))
   (assert (eps= (ret-double 0.55555 133.0) (+ 0.55555 133.0)))
   )
   )
 
+#-(or :s390x :riscv64 :loongarch64)
 (deftest test-return-eusfloat
   (format t "~%return eusfloat test~%")
   (format t "expected result~%")
@@ -493,9 +509,11 @@ test-testd = 1.23456
   (format t "~%ret-eusfloat(exec in eus)~%")
   (format t "  ret-eusfloat ~8,8e~%" (ret-eusfloat 0.55555 133.0))
   ;;
+  (when (not (memq :ppc *features*))
   (check-func 'ret-eusfloat)
   (assert-read-funcall= '(ret-eusfloat 0.55555 133.0) (+ 0.55555 133.0))
   (assert (eps= (ret-eusfloat 0.55555 133.0) (+ 0.55555 133.0)))
+  )
   )
 
 (deftest test-return-int

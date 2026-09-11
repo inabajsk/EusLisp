@@ -163,7 +163,7 @@ int ehbypass;
 pointer charmacro[256];
 pointer sharpmacro[256];
 
-extern pointer defvector();
+extern pointer defvector(context *, char *, pointer, int, int);
 static pointer reploop(context *, char *);
 
 pointer ALLOWOTHERKEYS,K_ALLOWOTHERKEYS;
@@ -269,7 +269,7 @@ char *errmsg[100]={
 	"E_END",
 	};
 
-static pointer brkloop();
+static pointer brkloop(context*,char*);
 
 void unwind(ctx,p)
 register context *ctx;
@@ -776,11 +776,15 @@ static void initclasses()
 /* 16    ---new for Solaris */
   LDMODULE=basicclass("LOAD-MODULE",C_CODE, &ldmodulecp,
 #if ARM // ARM uses entry2 in struct ldmodule in eus.h
-		      4,"ENTRY2",
+		      5,"ENTRY2",
 #else
 		      3,
 #endif
-		      "SYMBOL-TABLE","OBJECT-FILE", "HANDLE");
+		      "SYMBOL-TABLE","OBJECT-FILE", "HANDLE"
+#if ARM
+		      ,"HANDLE2"
+#endif
+		      );
   C_LDMOD=speval(LDMODULE);
 /*17*/
   LABREF=basicclass("LABEL-REFERENCE",C_OBJECT,&labrefcp,4,
@@ -903,7 +907,7 @@ static void initfeatures()
 #if Linux
   p=cons(ctx,intern(ctx,"LINUX",5,keywordpkg),p);
 #endif
-#if Linux_ppc
+#if defined(Linux_ppc) || defined(__PPC__)
   p=cons(ctx,intern(ctx,"PPC",3,keywordpkg),p);
 #endif
 #if USE_MULTI_LIB
@@ -951,6 +955,15 @@ static void initfeatures()
 #if aarch64
   p=cons(ctx,intern(ctx,"AARCH64",7,keywordpkg),p);
 #endif
+#if s390x
+  p=cons(ctx,intern(ctx,"S390X",5,keywordpkg),p);
+#endif
+#if riscv64
+  p=cons(ctx,intern(ctx,"RISCV64",7,keywordpkg),p);
+#endif
+#if loongarch64
+  p=cons(ctx,intern(ctx,"LOONGARCH64",11,keywordpkg),p);
+#endif
   {
     char tmp[32];
     sprintf(tmp, "WORD-SIZE=%zd", sizeof(void*)*8);
@@ -962,7 +975,15 @@ static void initfeatures()
   /*system function module*/
   sysmod=makemodule(ctx,0);
   sysmod->c.ldmod.codevec=makeint(0);
-  sysmod->c.ldmod.handle=makeint((eusinteger_t)dlopen(0, RTLD_LAZY)>>2);
+  void *handle = dlopen(0, RTLD_LAZY);
+  sysmod->c.ldmod.handle=makeint((eusinteger_t)handle>>2);
+#if ARM
+#if (WORD_SIZE == 64)
+  sysmod->c.ldmod.handle2=makeint((eusinteger_t)handle&0x00000000ffffffff);
+#else
+  sysmod->c.ldmod.handle2=makeint((eusinteger_t)handle&0x0000ffff);
+#endif
+#endif
   sysobj=cons(ctx,sysmod, sysobj);
   }
 
@@ -1139,7 +1160,7 @@ register context *ctx;
   int i,j;
   char *eusdir, *eusrt;
   char fname[1024];
-  extern pointer SRCLOAD();
+  extern pointer SRCLOAD(context*,int,pointer*);
 
   /* reset stack pointer and frame pointers*/
   j=(int)eussetjmp(topjbuf);  
@@ -1255,20 +1276,21 @@ register context *ctx;
   Spevalof(PACKAGE)=userpkg; 
 
   defvar(ctx,"*PROGRAM-NAME*",makestring(progname,strlen(progname)),lisppkg);
+  defvar(ctx,"*DEB-HOST-MULTIARCH*",makestring("@@DEB_HOST_MULTIARCH@@",strlen("@@DEB_HOST_MULTIARCH@@")),lisppkg);
 
   /* exec_module_initializers(); */
   ctx->vsp=ctx->stack;
   configure_eus(ctx); 
 
-  signal(SIGCHLD, (void (*)())eusint);
-  signal(SIGFPE,  (void (*)())eusint);
-  signal(SIGPIPE, (void (*)())eusint);
+  signal(SIGCHLD, (void (*)(int))eusint);
+  signal(SIGFPE,  (void (*)(int))eusint);
+  signal(SIGPIPE, (void (*)(int))eusint);
 #ifdef RGC
-//  signal(SIGSEGV, (void (*)())eusint); /* for debugging. R.Hanai */
+//  signal(SIGSEGV, (void (*)(int))eusint); /* for debugging. R.Hanai */
 #else
-  signal(SIGSEGV, (void (*)())eusint);
+  signal(SIGSEGV, (void (*)(int))eusint);
 #endif
-  signal(SIGBUS,  (void (*)())eusint);
+  signal(SIGBUS,  (void (*)(int))eusint);
 
   toplevel(ctx,mainargc,mainargv);
 
@@ -1293,7 +1315,7 @@ char *argv[];
   unsigned char *m;
 
 #ifdef Darwin
-  _end = sbrk(0);
+  _end = (int)(intptr_t)sbrk(0);
 #endif
 
   mypid=getpid();

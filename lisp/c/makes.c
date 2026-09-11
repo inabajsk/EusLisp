@@ -281,7 +281,7 @@ register pointer in,out;
 
 pointer makecode(mod,f,ftype)
 register pointer mod,ftype;
-pointer (*f)();
+pointer (*f)(context*,int,pointer*);
 /*actually, f is a pointer to a function returning a pointer*/
 { register pointer cd;
   eusinteger_t fentaddr;
@@ -377,7 +377,7 @@ register context *ctx;
 pointer name,superobj,vars,types,metaclass,forwards;
 int tag;
 { pointer class;
-  extern pointer makeobject();
+  extern pointer makeobject(pointer);
 
   /* make metaclass cell */
   vpush(vars); vpush(types);
@@ -501,11 +501,14 @@ int size;
   mod->c.ldmod.symtab=NIL;
   mod->c.ldmod.objname=NIL;
   mod->c.ldmod.handle=NIL;
+#if ARM
+  mod->c.ldmod.handle2=NIL;
+#endif
   return(mod);}
 
 pointer makeclosure(code,quote,f,e0,e1,e2)
 pointer code,quote,e0,*e1,*e2;
-pointer (*f)();
+pointer (*f)(context*,int,pointer*,pointer);
 { register pointer clo;
   clo=allocobj(CLOSURE, closure, closurecp.cix);
   clo->c.clo.codevec=code;
@@ -607,7 +610,7 @@ pointer defun(ctx,name,mod,f,doc)
 register context *ctx;
 char *name;
 pointer mod;
-pointer (*f)();
+pointer (*f)(context*,int,pointer*);
 char *doc;
 { register pointer sym,pkg,pdoc;
 #if defined(DEFUN_DEBUG) || defined(DEBUG_COUNT)
@@ -637,7 +640,7 @@ pointer defunpkg(ctx,name,mod,f,pkg)
 register context *ctx;
 char *name;
 pointer mod,pkg;
-pointer (*f)();
+pointer (*f)(context*,int,pointer*);
 { pointer sym;
   sym=intern(ctx,name,strlen(name),pkg);
   pointer_update(sym->c.sym.spefunc,makecode(mod,f,SUBR_FUNCTION));
@@ -647,7 +650,7 @@ pointer defmacro(ctx,name,mod,f)
 register context *ctx;
 char *name;
 pointer mod;
-pointer (*f)();
+pointer (*f)(context*,int,pointer*);
 { register pointer sym,pkg;
   pkg=Spevalof(PACKAGE);
   sym=intern(ctx,name,strlen(name),pkg);
@@ -683,11 +686,11 @@ pointer defspecial(ctx,name,mod,f)	/*define special form*/
 register context *ctx;
 char *name;
 pointer mod;
-pointer (*f)();
+pointer (*f)(context*,pointer);
 { register pointer sym,pkg;
   pkg=Spevalof(PACKAGE);
   sym=intern(ctx,name,strlen(name),pkg);
-  pointer_update(sym->c.sym.spefunc,makecode(mod,f,SUBR_SPECIAL));
+  pointer_update(sym->c.sym.spefunc,makecode(mod,(pointer(*)(context*,int,pointer*))f,SUBR_SPECIAL));
   return(sym);}
 
 pointer defconst(ctx,name,val,pkg)
@@ -741,12 +744,12 @@ char *name;
 /* for making compiled function/macro 
 */
 
-extern pointer putprop();
+extern pointer putprop(context*,pointer,pointer,pointer);
 
 pointer compfun(ctx,sym,mod,entry,doc)
 register context *ctx;
 register pointer sym,mod,doc;
-pointer (*entry)();
+pointer (*entry)(context*,int,pointer*);
 { pointer_update(sym->c.sym.spefunc,makecode(mod,entry,SUBR_FUNCTION));
   if (doc!=NIL) putprop(ctx,sym,doc,K_FUNCTION_DOCUMENTATION); 
   return(sym);}
@@ -754,7 +757,7 @@ pointer (*entry)();
 pointer compmacro(ctx,sym,mod,entry,doc)
 register context *ctx;
 register pointer sym,mod,doc;
-pointer (* entry)();
+pointer (* entry)(context*,int,pointer*);
 { pointer_update(sym->c.sym.spefunc,makecode(mod,entry,SUBR_MACRO));
   if (doc!=NIL) putprop(ctx,sym, doc, K_FUNCTION_DOCUMENTATION); 
   return(sym);}

@@ -24,7 +24,7 @@
 (eval-when (load eval)
 
 (defparameter *coptflags* "")
-(defparameter *cflags* "")
+(defparameter *cflags* (format nil " ~A" (or (unix::getenv "CFLAGS") "")))
 (defparameter *defun-list* nil)
 (defparameter *verbose* nil)
 (defparameter *optimize* 2)
@@ -1264,7 +1264,6 @@
 	 (setq file (merge-pathnames ".l" file))
          (if (null (probe-file  file)) 
 	     (error "file ~A not found~%" file)))
-      (warn "compiling file: ~A~%" (namestring file))
       (setq ins (open file))
       (setq *defun-list* nil)
       (when *multipass-optimize*
@@ -1344,7 +1343,7 @@
 			 ((memq :sunos4.1 *features*) " -DSunOS4_1")
 			 ((memq :Solaris2 *features*) " -DSolaris2")
 			 (t ""))
-		   (if (memq :gcc *features*) " -DGCC -fsigned-char " )
+		   (if (memq :gcc *features*) " -DGCC -Wno-old-style-definition -fsigned-char " )
 		   (if (memq :thread *features*) " -DTHREADED" )
 		   (if (memq :pthread *features*) " -DPTHREAD" )
 		   (if (memq :rgc *features*) " -DRGC -D__USE_POLLING -D__HEAP_EXPANDABLE -D__GC_SEPARATE_THREAD" )

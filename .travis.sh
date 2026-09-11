@@ -11,41 +11,43 @@ function travis_time_start {
     fi
     TRAVIS_TIME_ID=$(head /dev/urandom | base64 | head -c 8)
     TRAVIS_FOLD_NAME=$1
-    echo -e "\e[0Ktravis_fold:start:$TRAVIS_FOLD_NAME"
-    echo -e "\e[0Ktravis_time:start:$TRAVIS_TIME_ID"
+    echo -e "::group::$TRAVIS_FOLD_NAME"
+    # echo -e "\e[0Ktravis_fold:start:$TRAVIS_FOLD_NAME"
+    # echo -e "\e[0Ktravis_time:start:$TRAVIS_TIME_ID"
     set -x # enable debug information
 }
 function travis_time_end {
     set +x # disable debug information
     _COLOR=${1:-32}
+    if [ "$_COLOR" -le 30 ]; then
+	_COLOR=31  # red
+    fi
     if [ "$TRAVIS_OS_NAME" == "osx" ]; then
         TRAVIS_END_TIME=$(( $(date +%s)*1000000000 ))
     else
         TRAVIS_END_TIME=$(date +%s%N)
     fi
     TIME_ELAPSED_SECONDS=$(( ($TRAVIS_END_TIME - $TRAVIS_START_TIME)/1000000000 ))
-    echo -e "travis_time:end:$TRAVIS_TIME_ID:start=$TRAVIS_START_TIME,finish=$TRAVIS_END_TIME,duration=$(($TRAVIS_END_TIME - $TRAVIS_START_TIME))\n\e[0K"
-    echo -e "travis_fold:end:$TRAVIS_FOLD_NAME"
+    echo -e "::endgroup::"
+    # echo -e "travis_time:end:$TRAVIS_TIME_ID:start=$TRAVIS_START_TIME,finish=$TRAVIS_END_TIME,duration=$(($TRAVIS_END_TIME - $TRAVIS_START_TIME))\n\e[0K"
+    # echo -e "travis_fold:end:$TRAVIS_FOLD_NAME"
     echo -e "\e[0K\e[${_COLOR}mFunction $TRAVIS_FOLD_NAME takes $(( $TIME_ELAPSED_SECONDS / 60 )) min $(( $TIME_ELAPSED_SECONDS % 60 )) sec\e[0m"
 }
 
 if [ "$TRAVIS_OS_NAME" == "linux" ]; then 
 
     travis_time_start setup.apt-get_update
-    if [[ "$DOCKER_IMAGE" == *"stretch" || "$DOCKER_IMAGE" == *"jessie" ]] ; then
+    if [[ "$DOCKER_IMAGE" == *"jessie"  || "$DOCKER_IMAGE" == *"stretch"  || "$DOCKER_IMAGE" == *"buster" ]] ; then
+        # Busteris EOL, rewrite sources.list and configure apt
         cat /etc/apt/sources.list
-        sed -i s@httpredir.debian.org@archive.debian.org@ /etc/apt/sources.list;
-        sed -i s@deb.debian.org@archive.debian.org@ /etc/apt/sources.list;
-        sed -i s@security.debian.org/debian-security@archive.debian.org/debian-security@ /etc/apt/sources.list
-        sed -i '/-updates/ s/^#*/#/' /etc/apt/sources.list
-    fi
-    if [[ "$DOCKER_IMAGE" == *"buster" ]] ; then
-        cat /etc/apt/sources.list
-        sed -i 's@deb.debian.org/debian buster@archive.debian.org/debian buster@' /etc/apt/sources.list;
+        echo "Rewriting /etc/apt/sources.list"
+        sed -i 's@deb.debian.org/debian@archive.debian.org/debian@' /etc/apt/sources.list;
+        sed -i 's@security.debian.org/debian@archive.debian.org/debian@' /etc/apt/sources.list
         sed -i '/-updates/ s/^#*/#/' /etc/apt/sources.list
         cat /etc/apt/sources.list
+        printf 'Acquire::AllowInsecureRepositories "true";\nAcquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99-force-apt-update
     fi
-    if [ ! -e /usr/bin/sudo ] ; then apt-get update && apt-get install -y sudo;  else sudo apt-get update; fi
+    if [ ! -e /usr/bin/sudo ] ; then apt-get update && apt-get install -y --force-yes sudo;  else sudo apt-get update; fi
     travis_time_end
 
     travis_time_start setup.tzdata
@@ -75,6 +77,7 @@ if [ "$TRAVIS_OS_NAME" == "osx" ]; then
     brew list mesalib-glw &>/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install mesalib-glw
     brew list mesa-glu &>/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install mesa-glu
     brew list bullet &>/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install bullet
+    brew list xquartz &>/dev/null || HOMEBREW_NO_AUTO_UPDATE=1 brew install xquartz
     travis_time_end
 
 fi
@@ -95,11 +98,11 @@ if [[ "$QEMU" != "" ]]; then
     export GIT_SSL_NO_VERIFY=1
     git clone http://salsa.debian.org/science-team/euslisp /tmp/euslisp-dfsg
     for file in $(cat /tmp/euslisp-dfsg/debian/patches/series); do
-        # skip patches already applied by https://github.com/euslisp/EusLisp/pull/482, https://github.com/euslisp/EusLisp/pull/511
-        [[ $file =~ use-rtld-global-loadelf.patch|fix-arm-ldflags.patch|fix-library-not-linked-against-libc.patch|fix-manpage-has-bad-whatis-entry-on-man-pages.patch|fix-jpegmemcd-compile-error.patch|install-bin-lib-man-to-destdir.patch|install-eusjpeg-lib.patch ]] && continue;
-        # skip patch already applied by https://github.com/euslisp/EusLisp/pull/441, https://github.com/euslisp/EusLisp/pull/509
+        # skip patches already applied by https://github.com/euslisp/EusLisp/pull/482, https://github.com/euslisp/EusLisp/pull/511, https://github.com/euslisp/EusLisp/pull/522, https://github.com/euslisp/EusLisp/pull/523, https://github.com/euslisp/EusLisp/pull/524, https://github.com/euslisp/EusLisp/pull/525, https://github.com/euslisp/EusLisp/pull/534
+        [[ $file =~ use-rtld-global-loadelf.patch|fix-arm-ldflags.patch|fix-library-not-linked-against-libc.patch|fix-manpage-has-bad-whatis-entry-on-man-pages.patch|fix-jpegmemcd-compile-error.patch|install-bin-lib-man-to-destdir.patch|install-eusjpeg-lib.patch|fix-lintian-typo.patch|fix-makefile-linux-MACHINE.patch|fix-makefile-generic1-version.patch|fix-localtime-arm32.patch|fix-ppc64el-test.patch|fix-for-blhc.patch|remove-libeus-link-from-exe.patch|load-lib-from-eusdir-arch-lib.patch|fix-for-hardening.patch|fix-arm32.patch ]] && continue;
+        # skip patch already applied by https://github.com/euslisp/EusLisp/pull/441, https://github.com/euslisp/EusLisp/pull/509, https://github.com/euslisp/EusLisp/pull/512, https://github.com/euslisp/EusLisp/pull/514, https://github.com/euslisp/EusLisp/pull/517
         if [[ $file =~  fix-for-reprotest.patch ]]; then
-            filterdiff -p1 -x 'lisp/image/jpeg/makefile' -x 'lisp/comp/comp.l' < /tmp/euslisp-dfsg/debian/patches/$file > /tmp/euslisp-dfsg/debian/patches/$file-fix
+            filterdiff -p1 -x 'lisp/image/jpeg/makefile' -x 'lisp/l/common.l' -x 'lisp/comp/comp.l' < /tmp/euslisp-dfsg/debian/patches/$file > /tmp/euslisp-dfsg/debian/patches/$file-fix
             file=$file-fix
         fi
         echo $file

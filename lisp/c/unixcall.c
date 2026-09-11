@@ -132,7 +132,7 @@ pointer LOCALTIME(ctx,n,argv)
 register context *ctx;
 int n;
 pointer argv[];
-{ long clock;
+{ time_t clock;  /* sizoef time(0) is machine dependent and may differ from long */
   struct tm *tms;
   pointer timevec;
   pointer *tv;
@@ -142,6 +142,7 @@ pointer argv[];
   if (n==1) clock=coerceintval(argv[0]);
   else clock=time(0);
   tms=localtime_r((time_t *)&clock,&res); /* localtime-->localtime_r */
+  if (tms == NULL) tms = &res;
   timevec=makevector(C_VECTOR,10);
   vpush(timevec);
 
@@ -202,6 +203,9 @@ register pointer argv[];
 #else
   atp=asctime_r(tms,at,ASCTIME_STRLEN);	/* asctime --> asctime_r */
 #endif
+  if (atp == NULL) {
+    error(E_USER,(pointer)strerror(errno));
+  }
   return(makestring(atp,strlen(atp)));}
 
 #if !Solaris2
@@ -210,16 +214,28 @@ pointer GETRUSAGE(ctx,n,argv)
 register context *ctx;
 int n; pointer argv[];
 { register int who,i;
-  long rusage[18];
+  struct rusage usage;
   eusfloat_t utime,stime;
   register pointer r=NIL;
   numunion nu;
-
   ckarg(1); who=ckintval(argv[0]);
-  getrusage(who,(struct rusage *)rusage);
-  utime=rusage[0]+rusage[1]*1.0e-6;
-  stime=rusage[2]+rusage[3]*1.0e-6;
-  for (i=17; i>=4; i--) r=cons(ctx,makeint(rusage[i]),r);
+  getrusage(who,&usage);
+  utime=usage.ru_utime.tv_sec+usage.ru_utime.tv_usec*1.0e-6;
+  stime=usage.ru_stime.tv_sec+usage.ru_stime.tv_usec*1.0e-6;
+  r = cons(ctx, makeint(usage.ru_nivcsw), r); // 4
+  r = cons(ctx, makeint(usage.ru_nvcsw), r); // 5
+  r = cons(ctx, makeint(usage.ru_nsignals), r); // 6
+  r = cons(ctx, makeint(usage.ru_msgrcv), r); // 7
+  r = cons(ctx, makeint(usage.ru_msgsnd), r); // 8
+  r = cons(ctx, makeint(usage.ru_oublock), r); // 9
+  r = cons(ctx, makeint(usage.ru_inblock), r); // 10
+  r = cons(ctx, makeint(usage.ru_nswap), r); // 11
+  r = cons(ctx, makeint(usage.ru_majflt), r); // 12
+  r = cons(ctx, makeint(usage.ru_minflt), r); // 13
+  r = cons(ctx, makeint(usage.ru_isrss), r); // 14
+  r = cons(ctx, makeint(usage.ru_idrss), r); // 15
+  r = cons(ctx, makeint(usage.ru_ixrss), r); // 16
+  r = cons(ctx, makeint(usage.ru_maxrss), r); // 17
   r=cons(ctx,makeflt(stime),r); r=cons(ctx,makeflt(utime),r);
   /*(utime stime maxrss ixrss idrss isrss page-reclaims page-faults swap
 	inblock outblock msgsnd msgrcv nsignals
@@ -372,7 +388,7 @@ pointer argv[];
 { register int s,i;eusinteger_t f;
   struct sigaction sv;
   register pointer a=argv[1],oldval;
-  extern void eusint();	
+  extern void eusint(int,int,int,eusinteger_t);
   unsigned long int j;
 
   ckarg2(1,3);
@@ -381,7 +397,7 @@ pointer argv[];
   if (n==1) return(oldval);
   if (isint(a)) { f=max(1,intval(a)); eussigvec[s]=NIL;}
   else { f=(eusinteger_t)eusint; eussigvec[s]=a;}
-  sv.sa_handler= (void (*)())f;
+  sv.sa_handler= (void (*)(int))f;
 #if Linux || Cygwin
 
 #if LIB6 && !Darwin
@@ -413,7 +429,7 @@ pointer argv[];
 { register int s;eusinteger_t f;
   struct sigvec sv;
   register pointer a=argv[1],oldval;
-  extern void eusint();
+  extern void eusint(int,int,int,eusinteger_t);
 
   ckarg2(1,3);
   s=min(ckintval(argv[0]),NSIG-1);
@@ -1315,13 +1331,13 @@ register pointer argv[];
 { int stat;
   eusinteger_t s;
 /*  extern int eusint(); */
-  extern void eusint();	/* ???? */
+  extern void eusint(int,int,int,eusinteger_t);	/* ???? */
 
   s=(eusinteger_t)signal(SIGCHLD,SIG_DFL);/* ???? */
   if (n==0) stat=system("csh");
   else if (isstring(argv[0])) stat=system((char *)argv[0]->c.str.chars);
-  else { signal(SIGCHLD,(void (*)())s); error(E_NOSTRING);}
-  signal(SIGCHLD,(void (*)())s);
+  else { signal(SIGCHLD,(void (*)(int))s); error(E_NOSTRING);}
+  signal(SIGCHLD,(void (*)(int))s);
   return(makeint(stat));}
 
 pointer GETWD(ctx,n,argv)
