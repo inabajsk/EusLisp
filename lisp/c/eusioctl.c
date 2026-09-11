@@ -8,8 +8,9 @@ static char *rcsid="@(#)$Id$";
 #include <ctype.h>
 #include <sys/termios.h>
 #include <sys/ioctl.h>
-#ifndef Darwin
+#if !defined(Darwin) && __has_include(<termio.h>)
 #include <termio.h>
+#define HAVE_TERMIO_H 1
 #endif
 /*  #include <sgtty.h>  */
 
@@ -200,6 +201,7 @@ pointer argv[];
 { return(ioctl_struct(n,argv,TCSETSF,sizeof(struct termios)));}
 #endif
 
+#ifdef HAVE_TERMIO_H
 pointer IOCTL_TCGETA(ctx,n,argv)
 register context *ctx;
 int n;
@@ -222,6 +224,7 @@ pointer IOCTL_TCSETAW(n,argv)
 int n;
 pointer argv[];
 { return(ioctl_struct(n,argv,TCSETAW,sizeof(struct termio)));}
+#endif
 #endif
 
 pointer TCGETATTR(ctx,n,argv)
@@ -281,10 +284,12 @@ register pointer mod;
   defunpkg(ctx,"TCSETSW",mod,IOCTL_TCSETSW,unixpkg);
   defunpkg(ctx,"TCSETSF",mod,IOCTL_TCSETSF,unixpkg);
 #endif
+#ifdef HAVE_TERMIO_H
   defunpkg(ctx,"TCGETA",mod,IOCTL_TCGETA,unixpkg);
   defunpkg(ctx,"TCSETA",mod,IOCTL_TCSETA,unixpkg);
   defunpkg(ctx,"TCSETAW",mod,IOCTL_TCSETAW,unixpkg);
   defunpkg(ctx,"TCSETAF",mod,IOCTL_TCSETAF,unixpkg);
+#endif
 #endif
   defunpkg(ctx,"TCGETATTR",mod,TCGETATTR,unixpkg);
   defunpkg(ctx,"TCSETATTR",mod,TCSETATTR,unixpkg);
