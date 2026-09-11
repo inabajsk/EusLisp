@@ -68,7 +68,7 @@ DEBUG= -g
 # If you use libc.so.5, remove -DLIB6 option.
 # In order to include thread library, libc.so.6 is preferrable.
 
-CFLAGS=$(WFLAGS) -D$(MACHINE) -DLinux -DARM -D_REENTRANT -DVERSION=\"$(VERSION)\" \
+CFLAGS=$(WFLAGS) -std=gnu17 -D$(MACHINE) -DLinux -DARM -D_REENTRANT -DVERSION=\"$(VERSION)\" \
 	-DLIB6 $(ALIGN_FUNCTIONS) $(ADD_CFLAGS) \
         $(DEBUG) $(CPU_OPTIMIZE) $(THREAD) -D$(XVERSION) \
 	-DGCC $(GCC3) \
