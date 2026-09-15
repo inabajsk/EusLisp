@@ -28,7 +28,6 @@ static char *rcsid="@(#)$Id$";
 #ifdef Linux
 #include <sys/mman.h>
 #include <unistd.h>
-#include <string.h>
 #include <errno.h>
 #endif
 
@@ -111,8 +110,6 @@ register eusinteger_t cargv[]; /*arguments vector passed from C function*/
 #if 0
   printf("calleus : fsym.cix = %lX (%lX,%lX)\n", fsym->cix, fsym, &(fsym->cix));
 #endif
-  fprintf(stderr, "[DEBUG_PODCODE] calleus() REACHED fsym=%p cargv=%p\n", (void*)fsym, (void*)cargv);
-  fflush(stderr);
   ctx=euscontexts[thr_self()];
   argv=ctx->vsp;
   fs=(struct foreignpod *)fsym;
@@ -261,7 +258,10 @@ register int a2, a3, a4, a5, a6, a7, a8;
  * undefined behaviour per the architecture, even though it may appear
  * to work in casual testing.
  *
- * Called from eusforeign.l's foreign-pod :init method (#+:aarch64). */
+ * Called from eusforeign.l's foreign-pod :init method (aarch64
+ * unconditionally; x86_64 too, since a container's host kernel isn't
+ * guaranteed to grant the legacy READ_IMPLIES_EXEC behaviour its own
+ * -z execstack marking would otherwise rely on). */
 pointer MPROTECT_EXEC(ctx,n,argv)
 register context *ctx;
 int n;
@@ -273,13 +273,8 @@ pointer argv[];
   ps=sysconf(_SC_PAGESIZE);
   base=addr & ~(ps-1);
   end=(addr+len+ps-1) & ~(ps-1);
-  fprintf(stderr, "[DEBUG_PODCODE] mprotect(base=%lx, size=%lx) pagesize=%ld\n",
-          (long)base, (long)(end-base), (long)ps);
-  if (mprotect((void *)base,(size_t)(end-base),PROT_READ|PROT_WRITE|PROT_EXEC)<0) {
-      fprintf(stderr, "[DEBUG_PODCODE] mprotect FAILED errno=%d (%s)\n", errno, strerror(errno));
+  if (mprotect((void *)base,(size_t)(end-base),PROT_READ|PROT_WRITE|PROT_EXEC)<0)
       return(makeint(-errno));
-  }
-  fprintf(stderr, "[DEBUG_PODCODE] mprotect OK\n");
 #if defined aarch64
   __builtin___clear_cache((char *)addr,(char *)(addr+len));
 #endif

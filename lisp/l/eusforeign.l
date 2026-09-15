@@ -354,15 +354,7 @@
 	   ;; *host* kernel). Explicitly mprotect PROT_EXEC rather than
 	   ;; relying on that, same as aarch64 (which never had the
 	   ;; READ_IMPLIES_EXEC option to begin with) already has to.
-	   (let ((s1 (format nil "[DEBUG_PODCODE] x86_64 before mprotect-exec addr=~x len=~a~%"
-			     (sys:address podcode) (+ 16 (length podcode)))))
-	     (unix::write 1 s1 (length s1)))
-	   (let ((s2 (format nil "[DEBUG_PODCODE] x86_64 mprotect-exec returned ~a~%"
-			      (mprotect-exec (sys:address podcode) (+ 16 (length podcode))))))
-	     (unix::write 1 s2 (length s2)))
-	   (let ((s3 (format nil "[DEBUG_PODCODE] x86_64 podcode entry=~x~%"
-			      (+ 16 (sys:address podcode)))))
-	     (unix::write 1 s3 (length s3)))
+	   (mprotect-exec (sys:address podcode) (+ 16 (length podcode)))
 	   podcode)
 #+:aarch64
 ;; AArch64 (ARM64, AAPCS64) pod-code trampoline.
