@@ -28,6 +28,8 @@ static char *rcsid="@(#)$Id$";
 #ifdef Linux
 #include <sys/mman.h>
 #include <unistd.h>
+#include <string.h>
+#include <errno.h>
 #endif
 
 struct foreignpod {
@@ -269,8 +271,13 @@ pointer argv[];
   ps=sysconf(_SC_PAGESIZE);
   base=addr & ~(ps-1);
   end=(addr+len+ps-1) & ~(ps-1);
-  if (mprotect((void *)base,(size_t)(end-base),PROT_READ|PROT_WRITE|PROT_EXEC)<0)
+  fprintf(stderr, "[DEBUG_PODCODE] mprotect(base=%lx, size=%lx) pagesize=%ld\n",
+          (long)base, (long)(end-base), (long)ps);
+  if (mprotect((void *)base,(size_t)(end-base),PROT_READ|PROT_WRITE|PROT_EXEC)<0) {
+      fprintf(stderr, "[DEBUG_PODCODE] mprotect FAILED errno=%d (%s)\n", errno, strerror(errno));
       return(makeint(-errno));
+  }
+  fprintf(stderr, "[DEBUG_PODCODE] mprotect OK\n");
 #if defined aarch64
   __builtin___clear_cache((char *)addr,(char *)(addr+len));
 #endif

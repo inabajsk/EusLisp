@@ -354,7 +354,10 @@
 	   ;; *host* kernel). Explicitly mprotect PROT_EXEC rather than
 	   ;; relying on that, same as aarch64 (which never had the
 	   ;; READ_IMPLIES_EXEC option to begin with) already has to.
-	   (mprotect-exec (sys:address podcode) (+ 16 (length podcode)))
+	   (format t "[DEBUG_PODCODE] x86_64 before mprotect-exec addr=~x len=~a~%"
+		   (sys:address podcode) (+ 16 (length podcode)))
+	   (format t "[DEBUG_PODCODE] x86_64 mprotect-exec returned ~a~%"
+		   (mprotect-exec (sys:address podcode) (+ 16 (length podcode))))
 	   podcode)
 #+:aarch64
 ;; AArch64 (ARM64, AAPCS64) pod-code trampoline.
