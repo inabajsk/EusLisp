@@ -344,6 +344,8 @@
 			#x48 #x83 #xc4 #x78               ;; add   $0x78, %rsp
 			#xc3)))))                          ;; ret
            (if *debug* (format t "PODCODE ADDR: ~x~%" (+ 16 (sys:address podcode))))
+	   (format t "[DEBUG_PODCODE] x86_64 :init self-address=~x calleus=~x podcode-entry=~x~%"
+		   sa ca (+ 16 (sys:address podcode)))
 	   podcode)
 #+:aarch64
 ;; AArch64 (ARM64, AAPCS64) pod-code trampoline.
