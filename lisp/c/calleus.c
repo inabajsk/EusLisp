@@ -109,8 +109,6 @@ register eusinteger_t cargv[]; /*arguments vector passed from C function*/
 #if 0
   printf("calleus : fsym.cix = %lX (%lX,%lX)\n", fsym->cix, fsym, &(fsym->cix));
 #endif
-  fprintf(stderr, "[DEBUG_PODCODE] calleus() reached, fsym=%p cargv=%p\n",
-          (void*)fsym, (void*)cargv);
   ctx=euscontexts[thr_self()];
   argv=ctx->vsp;
   fs=(struct foreignpod *)fsym;
@@ -167,9 +165,7 @@ register eusinteger_t cargv[]; /*arguments vector passed from C function*/
     printf("argv[%d] = %lX\n", argv[i]);
   }
 #endif
-  fprintf(stderr, "[DEBUG_PODCODE] calleus() before ufuncall, argc=%d\n", argc);
   result=ufuncall(ctx,fsym,fsym,(pointer)argv,NULL,argc);
-  fprintf(stderr, "[DEBUG_PODCODE] calleus() after ufuncall, result=%p\n", (void*)result);
   ctx->vsp = argv;
   if (resulttype==K_STRING) return((eusinteger_t)(result->c.str.chars));
   else if (resulttype==K_FLOAT) {

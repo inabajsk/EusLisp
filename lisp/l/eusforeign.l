@@ -344,8 +344,17 @@
 			#x48 #x83 #xc4 #x78               ;; add   $0x78, %rsp
 			#xc3)))))                          ;; ret
            (if *debug* (format t "PODCODE ADDR: ~x~%" (+ 16 (sys:address podcode))))
-	   (format t "[DEBUG_PODCODE] x86_64 :init self-address=~x calleus=~x podcode-entry=~x~%"
-		   sa ca (+ 16 (sys:address podcode)))
+	   ;; i386/x86_64 Linux historically grants heap pages execute
+	   ;; permission via the kernel's READ_IMPLIES_EXEC personality
+	   ;; quirk, triggered by this binary's non-NX (execstack) marking
+	   ;; -- but that's a property of the *kernel* honoring it, not of
+	   ;; this process, and isn't guaranteed on every host a container
+	   ;; like this one might run under (e.g. CI running an old
+	   ;; ubuntu:trusty *userland* on a current, possibly hardened,
+	   ;; *host* kernel). Explicitly mprotect PROT_EXEC rather than
+	   ;; relying on that, same as aarch64 (which never had the
+	   ;; READ_IMPLIES_EXEC option to begin with) already has to.
+	   (mprotect-exec (sys:address podcode) (+ 16 (length podcode)))
 	   podcode)
 #+:aarch64
 ;; AArch64 (ARM64, AAPCS64) pod-code trampoline.
