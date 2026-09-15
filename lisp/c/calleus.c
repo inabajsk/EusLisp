@@ -111,6 +111,8 @@ register eusinteger_t cargv[]; /*arguments vector passed from C function*/
 #if 0
   printf("calleus : fsym.cix = %lX (%lX,%lX)\n", fsym->cix, fsym, &(fsym->cix));
 #endif
+  fprintf(stderr, "[DEBUG_PODCODE] calleus() REACHED fsym=%p cargv=%p\n", (void*)fsym, (void*)cargv);
+  fflush(stderr);
   ctx=euscontexts[thr_self()];
   argv=ctx->vsp;
   fs=(struct foreignpod *)fsym;
