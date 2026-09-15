@@ -564,7 +564,14 @@ test-testd = 1.23456
     (format t "LISP-INTFUNC is called, return ~D~%" 1234)
     1234)
   (format t "~%callback function test(integer)~%")
-  (set-ifunc (pod-address 'LISP-IFUNC))
+  ;; (intern "LISP-IFUNC"), not 'LISP-IFUNC: this whole deftest body is
+  ;; read as a single top-level form (deftest wraps it in one defun), so
+  ;; a quoted 'LISP-IFUNC here would capture the plain symbol that
+  ;; existed at read time, before defun-c-callable ran and replaced that
+  ;; symbol-table entry with a foreign-pod instance. (intern "...") does
+  ;; a fresh, run-time lookup by name and gets the current (foreign-pod)
+  ;; object instead.
+  (set-ifunc (pod-address (intern "LISP-IFUNC")))
   (format t "  expected result: LISP-INTFUNC is called, return 1234~%")
   (setq iret (call-ifunc))
   (format t "  call-ifunc = ~A~%" iret)
@@ -602,7 +609,8 @@ test-testd = 1.23456
     (assert (= i7 207))       ; 8th integer arg: x7 on aarch64
     0.12345)
   (format t "~%callback function test(float)~%")
-  (set-ffunc (pod-address 'LISP-FFUNC))
+  ;; (intern "LISP-FFUNC"), see the comment above set-ifunc's call above.
+  (set-ffunc (pod-address (intern "LISP-FFUNC")))
   (format t "  expected result: LISP-FFUNC is called
   100 101 102
   103 104 105
