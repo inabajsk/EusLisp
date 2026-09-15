@@ -549,41 +549,61 @@ test-testd = 1.23456
   (assert (= (ret-eusinteger 123 645000) (+ 123 645000)))
   )
 
-#|
 ;; ret-int
 ;; ret-short
 ;; ret-char
 
-;; callback function
-(defun-c-callable LISP-IFUNC () :integer
-  (format t "LISP-INTFUNC is called, return ~D~%" 1234)
-  1234)
-;;
-(format t "~%callback function test(integer)~%")
-(format t "  callback function is set~%")
-(set-ifunc (pod-address 'LISP-IFUNC))
-(format t "  expected result: LISP-INTFUNC is called, return 1234~%")
-(format t "  call-ifunc = ~A~%" (call-ifunc))
+;; Callback tests: C calls back into a Lisp function defined with
+;; defun-c-callable (the reverse direction of every other test in this
+;; file, which are Lisp calling C via defforeign). This exercises the
+;; per-architecture pod-code trampoline built by defun-c-callable/
+;; pod-address in lisp/l/eusforeign.l.
+(deftest test-callback-function
+  ;; integer-returning, 0-argument callback
+  (defun-c-callable LISP-IFUNC () :integer
+    (format t "LISP-INTFUNC is called, return ~D~%" 1234)
+    1234)
+  (format t "~%callback function test(integer)~%")
+  (set-ifunc (pod-address 'LISP-IFUNC))
+  (format t "  expected result: LISP-INTFUNC is called, return 1234~%")
+  (setq iret (call-ifunc))
+  (format t "  call-ifunc = ~A~%" iret)
+  (assert (= iret 1234))
 
-(defun-c-callable LISP-FFUNC ((i0 :integer) (i1 :integer) (i2 :integer)
-                              (i3 :integer) (i4 :integer) (i5 :integer)
-                              (f0 :float) (f1 :float) (f2 :float) (f3 :float)
-                              (f4 :float) (f5 :float) (f6 :float) (f7 :float)
-                              (f8 :float) (f9 :float)
-                              (i6 :integer) (i7 :integer)) :float
-  (format t "LISP-FFUNC is called~%")
-  (format t "~A ~A ~A~%" i0 i1 i2)
-  (format t "~A ~A ~A~%" i3 i4 i5)
-  (format t "~A ~A ~A ~A~%" f0 f1 f2 f3)
-  (format t "~A ~A ~A ~A~%" f4 f5 f6 f7)
-  (format t "~A ~A~%" f8 f9)
-  (format t "~A ~A~%" i6 i7)
-  (format t "return ~A~%" 0.12345)
-  0.12345)
-(format t "~%callback function test(float)~%")
-(format t "  callback function is set~%")
-(set-ffunc (pod-address 'LISP-FFUNC))
-(format t "  expected result: LISP-FFUNC is called
+  ;; float-returning, 18-argument callback: 6 integer args, 10 float
+  ;; args, then 2 more integer args (i6/i7). On aarch64 (AAPCS64, 8
+  ;; integer argument registers) i6/i7 arrive in x6/x7, unlike x86_64
+  ;; (SysV ABI, 6 integer argument registers) where they would already
+  ;; have spilled to the stack -- so this also checks that the
+  ;; per-architecture integer-register count in calleus.c/eusforeign.l
+  ;; agree with each other.
+  (defun-c-callable LISP-FFUNC ((i0 :integer) (i1 :integer) (i2 :integer)
+                                (i3 :integer) (i4 :integer) (i5 :integer)
+                                (f0 :float) (f1 :float) (f2 :float) (f3 :float)
+                                (f4 :float) (f5 :float) (f6 :float) (f7 :float)
+                                (f8 :float) (f9 :float)
+                                (i6 :integer) (i7 :integer)) :float
+    (format t "LISP-FFUNC is called~%")
+    (format t "~A ~A ~A~%" i0 i1 i2)
+    (format t "~A ~A ~A~%" i3 i4 i5)
+    (format t "~A ~A ~A ~A~%" f0 f1 f2 f3)
+    (format t "~A ~A ~A ~A~%" f4 f5 f6 f7)
+    (format t "~A ~A~%" f8 f9)
+    (format t "~A ~A~%" i6 i7)
+    (format t "return ~A~%" 0.12345)
+    (assert (= i0 100)) (assert (= i1 101)) (assert (= i2 102))
+    (assert (= i3 103)) (assert (= i4 104)) (assert (= i5 105))
+    (assert (eps= f0 1000.0)) (assert (eps= f1 1010.0))
+    (assert (eps= f2 1020.0)) (assert (eps= f3 1030.0))
+    (assert (eps= f4 1040.0)) (assert (eps= f5 1050.0))
+    (assert (eps= f6 1060.0)) (assert (eps= f7 1070.0))
+    (assert (eps= f8 2080.0)) (assert (eps= f9 2090.0))
+    (assert (= i6 206))       ; 7th integer arg: x6 on aarch64
+    (assert (= i7 207))       ; 8th integer arg: x7 on aarch64
+    0.12345)
+  (format t "~%callback function test(float)~%")
+  (set-ffunc (pod-address 'LISP-FFUNC))
+  (format t "  expected result: LISP-FFUNC is called
   100 101 102
   103 104 105
   1000.0 1010.0 1020.0 1030.0
@@ -591,8 +611,10 @@ test-testd = 1.23456
   2080.0 2090.0
   206 207
   return 0.12345~%")
-(format t "call-ffunc = ~A~%" (call-ffunc))
-|#
+  (setq fret (call-ffunc))
+  (format t "  call-ffunc = ~A~%" fret)
+  (assert (eps= fret 0.12345))
+  )
 
 (eval-when (load eval)
   (run-all-tests)

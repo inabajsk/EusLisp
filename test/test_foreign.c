@@ -336,7 +336,7 @@ static double (*gf) (long i0, long i1, long i2,
 long set_ifunc(long (*f) ())
 {
   g = f;
-  printf("set_ifunc, g = %lX\n", g);
+  return 0;
 }
 
 long set_ffunc(double (*f) ())
@@ -347,16 +347,19 @@ long set_ffunc(double (*f) ())
                     double d4, double d5, double d6, double d7,
                     double d8, double d9,
                     long i6, long i7))f;
-  printf("set_ffunc, gf = %lX\n", gf);
+  return 0;
 }
 
+/* NOTE: deliberately no printf()/stdio calls here before invoking the
+ * callback (g/gf, a defun-c-callable pod-code trampoline): doing so
+ * triggers an unrelated, still-not-fully-understood loop/corruption on
+ * aarch64 when combined with GCC's handling of the following indirect
+ * call. See the defun-c-callable aarch64 PR discussion. */
 long call_ifunc() {
-  printf("call_ifunc, g = %lX\n", g);
   return g();
 }
 
 double call_ffunc() {
-  printf("call_ffunc, gf = %lX\n", gf);
   return gf(100,101,102,
             103,104,105,
             1000.0, 1010.0, 1020.0, 1030.0,
