@@ -293,81 +293,56 @@
 	   podcode)
 |#
 #+:x86_64
-	(let ((calleus-offset 0))
-	   (setq podcode (byte-string
-                #x48 #x83 #xec #x78
-                #x48 #x89 #x3c #x24
-                #x48 #x89 #x74 #x24 #x08
-                #x48 #x89 #x54 #x24 #x10
-                #x48 #x89 #x4c #x24 #x18
-                #x4c #x89 #x44 #x24 #x20
-                #x4c #x89 #x4c #x24 #x28
-                #xf2 #x0f #x11 #x44 #x24 #x30
-                #xf2 #x0f #x11 #x4c #x24 #x38
-                #xf2 #x0f #x11 #x54 #x24 #x40
-                #xf2 #x0f #x11 #x5c #x24 #x48
-                #xf2 #x0f #x11 #x64 #x24 #x50
-                #xf2 #x0f #x11 #x6c #x24 #x58
-                #xf2 #x0f #x11 #x74 #x24 #x60
-                #xf2 #x0f #x11 #x7c #x24 #x68
-		#x48 #xbf ;;#x00 #x00 #x00 #x00 ;; mov $addr, %rdi
-		     (ldb self-address 0 8)
-		     (ldb self-address 8 8)
-		     (ldb self-address 16 8)
-		     (ldb self-address 24 8)
-		     (ldb self-address 32 8)
-		     (ldb self-address 40 8)
-		     (ldb self-address 48 8)
-		     (ldb self-address 56 8)
-                #x48 #x89 #xe6
-                #xb8 #x00 #x00 #x00 #x00
-                #xe8 #x00 #x00 #x00 #x00
-                #x48 #x83 #xc4 #x78
-		#xc3                     ;; retq
-                #x90 #x90 #x90 #x90
-                #x90 #x90 #x90 #x90 #x90
-		))
-           (if (or (eq :float result) (eq :float32 result))
-	       (replace podcode
-			(list #x48 #x89 #x04 #x24
-                              #xf2 #x0f #x10 #x04 #x24
-                              #x48 #x83 #xc4 #x78
-                              #xc3) :start1 104))
-;; /* development version of pod-code for x86_64 written by Y.Kakiuchi */
-;; 000:  48 83 ec 78             sub    $0x78,%rsp
-;; 004:  48 89 3c 24             mov    %rdi,(%rsp)
-;; 008:  48 89 74 24 08          mov    %rsi,0x8(%rsp)
-;; 00d:  48 89 54 24 10          mov    %rdx,0x10(%rsp)
-;  012:  48 89 4c 24 18          mov    %rcx,0x18(%rsp)
-;; 017:  4c 89 44 24 20          mov    %r8,0x20(%rsp)
-;; 01c:  4c 89 4c 24 28          mov    %r9,0x28(%rsp)
-;; 021:  f2 0f 11 44 24 30       movsd  %xmm0,0x30(%rsp)
-;; 027:  f2 0f 11 4c 24 38       movsd  %xmm1,0x38(%rsp)
-;; 02d:  f2 0f 11 54 24 40       movsd  %xmm2,0x40(%rsp)
-;; 033:  f2 0f 11 5c 24 48       movsd  %xmm3,0x48(%rsp)
-;; 039:  f2 0f 11 64 24 50       movsd  %xmm4,0x50(%rsp)
-;; 03f:  f2 0f 11 6c 24 58       movsd  %xmm5,0x58(%rsp)
-;; 045:  f2 0f 11 74 24 60       movsd  %xmm6,0x60(%rsp)
-;; 04b:  f2 0f 11 7c 24 68       movsd  %xmm7,0x68(%rsp)
-;; 051:  48 bf 77 ef cd ab 77    mov    $0xabcdef77abcdef77,%rdi
-;; 058:  ef cd ab
-;; 05b:  48 89 e6                mov    %rsp,%rsi
-;; 05e:  b8 00 00 00 00          mov    $0x0,%eax
-;; 063:  e8 a0 01 00 00          callq  4007b8 <calleus>
-;;; return integer
-;; 068:  48 83 c4 78             add    $0x78,%rsp
-;; 06c:  c3                      retq
-;;; return float
-;; 068:  48 89 04 24             mov    %rax,(%rsp)
-;; 06c:  f2 0f 10 04 24          movsd  (%rsp),%xmm0
-;; 071:  48 83 c4 78             add    $0x78,%rsp
-;; 075:  c3                      retq
-	   (setq calleus-offset (- *calleus* (+ (sys:address podcode) 16 100 4)))
-	   (replace podcode
-		    (list
-			(ldb calleus-offset 0 8) (ldb calleus-offset 8 8)
-			(ldb calleus-offset 16 8)  (ldb calleus-offset 24 8))
-		    :start1 100)
+;; development version of pod-code for x86_64 written by Y.Kakiuchi;
+;; self/*calleus* embedded as absolute 64bit immediates (movabs +
+;; call *%reg) rather than a pc-relative call. A pc-relative call's
+;; 32bit displacement can't reach a *calleus* (in eus's own .text/lib)
+;; that lands more than +-2GB from this pod-code object (in the Lisp
+;; heap) in the process's address space -- entirely possible with
+;; ASLR on a modern 64bit Linux -- which silently truncates the
+;; displacement and calls a bogus address. See the aarch64 stub above,
+;; which never had a pc-relative option to begin with (AArch64's BL
+;; only has a +-128MB range) and uses the same absolute-address
+;; approach.
+	(let* ((sa self-address)
+	       (ca *calleus*))
+	   (setq podcode
+	     (apply #'byte-string
+	       (append
+		 (list
+                    #x48 #x83 #xec #x78                 ;; sub  $0x78, %rsp
+                    #x48 #x89 #x3c #x24                 ;; mov  %rdi, (%rsp)
+                    #x48 #x89 #x74 #x24 #x08             ;; mov  %rsi, 0x8(%rsp)
+                    #x48 #x89 #x54 #x24 #x10             ;; mov  %rdx, 0x10(%rsp)
+                    #x48 #x89 #x4c #x24 #x18             ;; mov  %rcx, 0x18(%rsp)
+                    #x4c #x89 #x44 #x24 #x20             ;; mov  %r8,  0x20(%rsp)
+                    #x4c #x89 #x4c #x24 #x28             ;; mov  %r9,  0x28(%rsp)
+                    #xf2 #x0f #x11 #x44 #x24 #x30         ;; movsd %xmm0, 0x30(%rsp)
+                    #xf2 #x0f #x11 #x4c #x24 #x38         ;; movsd %xmm1, 0x38(%rsp)
+                    #xf2 #x0f #x11 #x54 #x24 #x40         ;; movsd %xmm2, 0x40(%rsp)
+                    #xf2 #x0f #x11 #x5c #x24 #x48         ;; movsd %xmm3, 0x48(%rsp)
+                    #xf2 #x0f #x11 #x64 #x24 #x50         ;; movsd %xmm4, 0x50(%rsp)
+                    #xf2 #x0f #x11 #x6c #x24 #x58         ;; movsd %xmm5, 0x58(%rsp)
+                    #xf2 #x0f #x11 #x74 #x24 #x60         ;; movsd %xmm6, 0x60(%rsp)
+                    #xf2 #x0f #x11 #x7c #x24 #x68         ;; movsd %xmm7, 0x68(%rsp)
+                    #x48 #xbf                             ;; movabs $self-address, %rdi
+                    (ldb sa 0 8) (ldb sa 8 8) (ldb sa 16 8) (ldb sa 24 8)
+                    (ldb sa 32 8) (ldb sa 40 8) (ldb sa 48 8) (ldb sa 56 8)
+                    #x48 #x89 #xe6                       ;; mov  %rsp, %rsi   (cargv pointer)
+                    #xb8 #x00 #x00 #x00 #x00             ;; mov  $0x0, %eax
+                    #x48 #xb8                             ;; movabs $calleus, %rax
+                    (ldb ca 0 8) (ldb ca 8 8) (ldb ca 16 8) (ldb ca 24 8)
+                    (ldb ca 32 8) (ldb ca 40 8) (ldb ca 48 8) (ldb ca 56 8)
+                    #xff #xd0)                            ;; call *%rax
+		 (if (or (eq :float result) (eq :float32 result))
+		     (list
+			#x48 #x89 #x04 #x24               ;; mov   %rax, (%rsp)
+			#xf2 #x0f #x10 #x04 #x24          ;; movsd (%rsp), %xmm0
+			#x48 #x83 #xc4 #x78               ;; add   $0x78, %rsp
+			#xc3)                             ;; ret
+		     (list
+			#x48 #x83 #xc4 #x78               ;; add   $0x78, %rsp
+			#xc3)))))                          ;; ret
            (if *debug* (format t "PODCODE ADDR: ~x~%" (+ 16 (sys:address podcode))))
 	   podcode)
 #+:aarch64
