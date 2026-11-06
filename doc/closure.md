@@ -25,7 +25,7 @@ that live in the heap, so they can be returned, stored and called later
   same as the original compiler's output (`makeclosure`, no boxes).
 * Closures already made keep working after the mode is changed.
 * With `nil`, `test/closure/run-tests.sh` gives exactly the same
-  PASS / FAIL / CRASH pattern as the original jskeus build (8 / 42).
+  PASS / FAIL / CRASH pattern as the original jskeus build (8 / 46).
 
 ## Interpreter (`lisp/c/eval.c`, `specials.c`)
 
@@ -67,7 +67,7 @@ that live in the heap, so they can be returned, stored and called later
 
 ## Tests
 
-* `test/closure.l` (unittest): 21 cases, interpreted and compiled.
+* `test/closure.l` (unittest): 23 cases, interpreted and compiled.
 * `test/closure/run-tests.sh <env.sh> eus <label>` runs every case in its
   own process (a crash does not hide the other cases), interpreted and
   compiled.  The same `closure-defs.l` also runs on other EusLisp builds.
@@ -77,18 +77,26 @@ Results (2026-11-06, WSL2 Ubuntu 24.04, x86_64):
 
 | build | closure cases (interp + comp) |
 |---|---|
-| jskeus master (EusLisp 9.32) | 8 / 42 |
-| this branch | 42 / 42 (`*closure-mode*` nil: 8 / 42, same as master) |
-| affonso-gui/EusLisp `eus10` | 42 / 42 |
+| jskeus master (EusLisp 9.32) | 8 / 46 |
+| this branch | 46 / 46 (`*closure-mode*` nil: 8 / 46, same as master) |
+| affonso-gui/EusLisp `eus10` | 46 / 46 |
 
 `test/*.l` of EusLisp and `irteus/test` give the same results as the
 original build.
+
+## Adopted from affonso-gui/EusLisp eus10
+
+* macro-expanding look-ahead for captured variables
+* compile-time error for a variable used through a closure but not captured
+* compiled flet/labels bodies are enclosed by a block of the function name
+* `:closure` in `*features*`, manual sections on closures
 
 ## Known limitations
 
 * An `unwind-protect` cleanup form that creates a closure which escapes
   after the function returns may still refer to the dead stack frame.
-* The capture analysis is textual: a macro that expands into a reference
-  to a variable that does not appear in the source of the lambda is not
-  seen (the closure then gets a copy, not a shared box, in compiled code).
+* The capture analysis expands macros inside closure bodies (adopted from
+  affonso-gui/EusLisp eus10).  If a captured variable is still missed, the
+  compiler reports a compile error; the interpreter caches the analysis per
+  lambda form (lambdas built at run time make the cache grow).
 * The RGC collector (`collector.c`) was not updated.
