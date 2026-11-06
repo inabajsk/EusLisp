@@ -154,6 +154,16 @@
   (let ((h (compose (make-adder 1) (make-adder 10))))
     (clobber 40) (funcall h 100)))
 
+;; 21 heap closure called where no lexical binding is active
+;;    (in the interpreter the body of a function without parameters runs
+;;    with bindfp = NULL, like forms typed at the toplevel REPL)
+(defun test-toplevel ()
+  (setq *top-c* (make-counter 0))
+  (funcall *top-c*)
+  (funcall *top-c*)
+  (setq *top-l* (list 1 2 3))
+  (list (funcall *top-c*) (length *top-l*)))
+
 (setq *closure-tests*
   '((test-counter (11 12 13))
     (test-shared 125)
@@ -174,4 +184,5 @@
     (test-self-ref 120)
     (test-special (1 2))
     (test-global 42)
-    (test-compose 111)))
+    (test-compose 111)
+    (test-toplevel (3 3))))

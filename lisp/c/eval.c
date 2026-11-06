@@ -1655,7 +1655,7 @@ register pointer args;	/*or 'pointer *' */
 struct bindframe *env;
 int noarg;
 { pointer func,formal,aval,ftype,result,*argp,hook,cloenv=NIL;
-  struct bindframe *bfsave=NULL;
+  struct bindframe *bfsave=NULL; int bfrestore=0;
   register struct callframe *vf=(struct callframe *)(ctx->vsp);
   struct specialbindframe *sbfps=ctx->sbindfp;
   register int n=0,i;
@@ -1797,10 +1797,11 @@ int noarg;
         /* the rebuilt frames lie above the caller's frames on the stack;
            make them the declaration-scope limit of funlambda (vbind checks
            duplicated parameters only above that limit) */
-        if (env) { bfsave=ctx->bindfp; ctx->bindfp=env;} }
+        bfsave=ctx->bindfp; bfrestore=1;
+        if (env) ctx->bindfp=env; }
       ctx->fletfp=fenv; }
     result=funlambda(ctx,fn,formal,func,argp,env,noarg);
-    if (bfsave) ctx->bindfp=bfsave;
+    if (bfrestore) ctx->bindfp=bfsave;	/*bindfp may be NULL at toplevel*/
     ctx->vsp=(pointer *)vf;
     ctx->callfp=vf->vlink;
     GC_POINT;
