@@ -197,4 +197,5 @@
     (test-compose 111)
     (test-toplevel (3 3))
     (test-macro-hidden (11 12))
-    (test-labels-block (-3 nil))))
+    (test-labels-block (-3 nil))
+    (test-ovaf-macro-name 42)))

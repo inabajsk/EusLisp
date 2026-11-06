@@ -258,6 +258,13 @@
       (if *cc-inside* (cc-add x))
     (let ((op (car x)))
       (cond
+	;; (obj . slot): object-variable access (ovaf), not a call -- the
+	;; compiler checks this before macros too (e.g. a variable named pf,
+	;; which is also a macro name)
+	((and (cdr x) (atom (cdr x)))
+	 (cc-walk op))
+	;; only proper lists are calls or special forms
+	((cdr (last x)) nil)
 	((memq op '(quote go declare defun defmacro defmethod defclass)) nil)
 	((eq op 'function)
 	 (if (consp (cadr x)) (cc-walk-lambda (cadr x))))

@@ -11,3 +11,12 @@
 (defun test-labels-block ()
   (let ((f (make-finder))) (clobber 40) (list (funcall f '(1 2 -3 4)) (funcall f '(1 2)))))
 
+
+;; 24 slot access (obj . slot) whose object variable has a macro name (pf):
+;;    the capture analysis must not macroexpand it (found in kxreus)
+(defclass cdx-pf :super object :slots (val))
+(defun make-pf-reader (pf) #'(lambda () (pf . val)))
+(defun test-ovaf-macro-name ()
+  (let ((o (instantiate cdx-pf)))
+    (setq (o . val) 42)
+    (let ((f (make-pf-reader o))) (clobber 40) (funcall f))))
