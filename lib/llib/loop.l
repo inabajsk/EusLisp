@@ -59,6 +59,8 @@
 (defvar *loop-accums*)		; ((name var tail kind) ...)
 (defvar *loop-it*)		; variable holding the value of a when test
 (defvar *loop-par-pre* nil)	; parallel (and) steps: values computed first
+(defvar *loop-user-vars* nil)	; variables named by the user (duplicates are errors)
+(defvar *loop-kinds* nil)	; :value (default accumulation) / :boolean (always ...)
 
 (defun loop-pop () (pop *loop-tokens*))
 (defun loop-peek () (car *loop-tokens*))
@@ -85,9 +87,15 @@
 
 ;; destructuring: declare the variables of PATTERN, return code that sets
 ;; them from the value of FORM
+(defun loop-user-var (v)
+  ;; ANSI 6.1.1.7: a variable may be bound only once in a loop
+  (if (member v *loop-user-vars*)
+      (error "loop: variable ~s is bound more than once" v))
+  (push v *loop-user-vars*)
+  (loop-var v))
 (defun loop-declare-pattern (pat)
   (cond ((null pat) nil)
-        ((symbolp pat) (loop-var pat))
+        ((symbolp pat) (loop-user-var pat))
         ((consp pat) (loop-declare-pattern (car pat)) (loop-declare-pattern (cdr pat)))))
 (defun loop-destructure (pat form)
   (cond ((null pat) nil)
@@ -208,6 +216,8 @@
   ;; kind: :list (collect/append/nconc), :count, :sum, :max, :min
   (let ((a (assoc (or into :default) *loop-accums*)))
     (unless a
+      (if into (loop-user-var into))	; into var must not be bound by with/for
+      (unless into (loop-kind :value))
       (let ((var (or into (gensym "ACC"))) (tail (gensym "TAIL")))
         (loop-var var (case kind ((:count :sum) 0) (t nil)))
         (loop-var tail nil)
@@ -215,6 +225,12 @@
         (push a *loop-accums*)
         (unless into (setq *loop-result* var))))
     a))
+
+(defun loop-kind (k)
+  ;; a loop may not both accumulate a default value and use always/never/thereis
+  (if (and *loop-kinds* (not (eq *loop-kinds* k)))
+      (error "loop: value accumulation and always/never/thereis in one loop"))
+  (setq *loop-kinds* k))
 
 (defun loop-accum-code (kw form into)
   (let* ((kind (cond ((loop-kw-p kw "COLLECT" "COLLECTING" "APPEND" "APPENDING" "NCONC" "NCONCING") :list)
@@ -314,13 +330,13 @@
      ((loop-kw-p kw "WHILE") (loop-pop) (push (loop-end-test `(not ,(loop-pop))) *loop-body*))
      ((loop-kw-p kw "UNTIL") (loop-pop) (push (loop-end-test (loop-pop)) *loop-body*))
      ((loop-kw-p kw "ALWAYS")
-      (loop-pop) (setq *loop-result* t)
+      (loop-pop) (loop-kind :boolean) (setq *loop-result* t)
       (push `(unless ,(loop-pop) (return-from ,*loop-name* nil)) *loop-body*))
      ((loop-kw-p kw "NEVER")
-      (loop-pop) (setq *loop-result* t)
+      (loop-pop) (loop-kind :boolean) (setq *loop-result* t)
       (push `(when ,(loop-pop) (return-from ,*loop-name* nil)) *loop-body*))
      ((loop-kw-p kw "THEREIS")
-      (loop-pop)
+      (loop-pop) (loop-kind :boolean)
       (let ((v (gensym "T")))
         (push `(let ((,v ,(loop-pop))) (when ,v (return-from ,*loop-name* ,v))) *loop-body*)))
      ((loop-keyword-p kw) (push (loop-selectable) *loop-body*))
@@ -330,6 +346,7 @@
   (let ((*loop-tokens* forms) (*loop-name* nil) (*loop-vars* nil) (*loop-init* nil)
         (*loop-initially* nil) (*loop-finally* nil) (*loop-first* nil) (*loop-step* nil)
         (*loop-body* nil) (*loop-result* nil) (*loop-accums* nil) (*loop-it* nil)
+        (*loop-user-vars* nil) (*loop-kinds* nil)
         (next (gensym "NEXT")) (first (gensym "FIRST")))
     (while *loop-tokens* (loop-parse-clause))
     `(block ,*loop-name*
