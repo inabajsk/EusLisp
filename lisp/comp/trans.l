@@ -197,6 +197,11 @@
  (:load-global (ent)
     (send self :push (format nil "loadglobal(fqv[~d])"
 				 (send self :quote-entry ent))))
+ (:load-local-box (n level)
+    (send self :push
+	       (format nil "~A[~d]->c.cons.car" (send self :getbase level nil) n)))
+ (:store-local-box (offset level)
+    (send self :store (format nil "~A[~d]->c.cons.car" (send self :getbase level nil) offset)))
  (:store-arg (n level)
     (send self :store (format nil "~A[~d]" (send self :getbase level 'arg) n)))
  (:store-local (offset level)
@@ -584,11 +589,34 @@
     (if need-unwind
 	(format cfile  "	unwind(ctx,local+~d);~%" k))
     (inc pushcount))
-  (:closure (lab)
+  (:closure (lab &optional heap (nargs 0) envp (nlocal 0))
+    ;; closure branch: heap=t makes a closure of indefinite extent whose
+    ;; frame copy lives in the heap (makeclosure2); unwind-protect cleaners
+    ;; keep the stack-referencing makeclosure.
     (send self :clearpush)
     (send self :reset-vsp)
     (send self :push
-	  (format nil "makeclosure(codevec,quotevec,~A,env,argv,local)" lab)))
+	  (if heap
+	      (format nil "makeclosure3(ctx,codevec,quotevec,~A,~A,argv,~d,~d)"
+		      lab (if envp "env" "NIL") nargs nlocal)
+	      (format nil "makeclosure(codevec,quotevec,~A,env,argv,local)" lab))))
+  (:fill-closure (slot origs)
+    ;; closure branch: copy the captured slots (boxes, local functions)
+    ;; of this frame into the compact frame of the closure in local[slot]
+    (send self :clearpush)
+    (let ((i 0))
+      (dolist (o origs)
+	(format cfile "	local[~d]->c.clo.env2[~d]=local[~d];~%" slot i o)
+	(setq i (1+ i)))))
+  (:patch-labels (offsets)
+    (send self :clearpush)
+    (dolist (o offsets)
+      (dolist (p offsets)
+	(format cfile "	local[~d]->c.clo.env2[~d]=local[~d];~%" o p p))))
+  (:box-local (offset)
+    (send self :clearpush)
+    (send self :reset-vsp)
+    (format cfile "	local[~d]= cons(ctx,local[~d],NIL); /*box*/~%" offset offset))
  (:defun (sym cname doc)
     (send self :clearpush)
     (send self :reset-vsp)

@@ -14,6 +14,8 @@ static char *rcsid="@(#)$Id$";
 
 #include "eus.h"
 extern pointer MACRO,LAMBDA,LAMCLOSURE;
+extern pointer make_heap_closure(context *, pointer, pointer);
+extern pointer function_of_flet(context *, pointer);
 extern pointer K_FUNCTION_DOCUMENTATION;
 extern struct bindframe  *declare(context*, pointer, struct bindframe*);
 
@@ -140,11 +142,21 @@ pointer arg;
   hoge_print( arg );
 #endif
   arg=ccar(arg);
-  if (issymbol(arg)) { funcname=arg; arg=getfunc(ctx,arg);}
+  if (issymbol(arg)) {
+    funcname=arg;
+    /* closure branch: #'f of a flet/labels function returns a heap closure */
+    if (speval(QCLOSUREMODE)!=NIL) {
+      pointer fc=function_of_flet(ctx,arg); if (fc) return(fc);}
+    arg=getfunc(ctx,arg);}
   else funcname=NIL;
   if (iscode(arg)) return(arg);
   else if (ccar(arg)==LAMCLOSURE) return(arg);
   else if (ccar(arg)==LAMBDA) {
+    if (speval(QCLOSUREMODE)!=NIL)
+      /* closure branch: the lexical environment is copied to the heap and the
+         captured variables are boxed, so the closure has indefinite extent */
+      return(make_heap_closure(ctx,funcname,arg));
+    /* *closure-mode* = nil: original closure with stack addresses */
     arg=cons(ctx,makeint(hide_ptr((pointer)(ctx->fletfp))),ccdr(arg));
     arg=cons(ctx,makeint(hide_ptr((pointer)(ctx->bindfp))),arg);
     arg=cons(ctx,funcname,arg);

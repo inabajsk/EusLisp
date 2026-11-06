@@ -469,7 +469,14 @@ markagain:
 #ifdef MARK_DEBUG
   printf( "mark: markon 0x%lx\n", bp );
 #endif
-  if (pisclosure(p)) goto markloop;	/*avoid marking contents of closure*/
+  if (pisclosure(p)) {	/*avoid marking stack pointers in a closure*/
+    /* closure branch: a heap closure (makeclosure2) owns ENVVEC, and its
+       ENV0 is either NIL or the enclosing closure object */
+    if (p->c.clo.envvec!=NIL && ispointer(p->c.clo.envvec)) {
+      while (lgcsp+2>gcsplimit) { newgcstack(lgcsp); lgcsp=gcsp;}
+      gcpush(p->c.clo.envvec);
+      if (ispointer(p->c.clo.env0)) gcpush(p->c.clo.env0);}
+    goto markloop;}
   marking=p;
 /*  printf("%x, %x, %d, %d, %d\n", p, bp, bp->h.elmtype, bp->h.bix, buddysize[bp->h.bix] );*/
   if (bp->h.elmtype==ELM_FIXED) {	/*contents are all pointers*/

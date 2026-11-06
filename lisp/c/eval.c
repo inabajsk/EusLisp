@@ -52,6 +52,7 @@ register pointer sym;
     val=bf->val;
     if (sym==var) {		/*found in bind-frame*/
       if (val==UNBOUND) goto getspecial;
+      if (isclobox(val)) return(val->c.lab.value);	/*captured variable*/
       return(val);}
     else if (var->cix==vectorcp.cix) {
       vaddr=getobjv(sym,var,val);
@@ -80,7 +81,9 @@ register pointer sym,val;
     var=bf->sym;
     if (sym==var) {
       if (bf->val==UNBOUND) goto setspecial;
-      pointer_update(bf->val,val); return(val);}
+      if (isclobox(bf->val)) {pointer_update(bf->val->c.lab.value,val);}
+      else {pointer_update(bf->val,val);}
+      return(val);}
     else if (var->cix==vectorcp.cix) {
       vaddr=getobjv(sym,var,bf->val);
       if (vaddr) {pointer_update(*vaddr,val); return(val);}}
@@ -233,6 +236,166 @@ struct bindframe *env;
 	if (var->c.sym.vtype < V_SPECIAL) env=vbind(ctx,var,UNBOUND,env,ctx->bindfp);
         decl=ccdr(decl); } }  }
   return(env);}
+
+/****************************************************************/
+/* heap closures for the interpreter (closure branch)
+/*  A lambda-closure made by FUNCTION has the form
+/*     (lambda-closure name ENV 0 formals . body)
+/*  where ENV is a label-reference object labeled sys::closure-env:
+/*     value    = ((sym . box-or-value) ...)   lexical variables, innermost first
+/*     unsolved = ((fname . closure) ...)      flet/labels functions, innermost first
+/*  Each captured lexical variable is moved into a box (label-reference
+/*  labeled sys::closure-box) which is shared by the stack frame of the
+/*  creator and by every closure, so assignments are seen by all of them.
+/*  When the closure is called, the frames are rebuilt on the stack.
+/*  Closures made by makeflet/unwind-protect keep the old form with
+/*  stack addresses (integers) until they are captured.
+/****************************************************************/
+
+/* does symbol SYM occur anywhere in FORM?  Used to capture only the
+   variables and local functions that a closure body can refer to. */
+int sym_occurs(sym,form)
+register pointer sym,form;
+{ while (iscons(form)) {
+    if (sym_occurs(sym,ccar(form))) return(1);
+    form=ccdr(form);}
+  return(form==sym);}
+
+pointer capture_benv(ctx,bf,body)
+register context *ctx;
+register struct bindframe *bf;
+pointer body;		/*only variables occurring in body are captured*/
+{ pointer *rp=ctx->vsp, v, sym, pr;
+  vpush(NIL); vpush(NIL);	/* rp[0]: list (outermost first), rp[1]: work */
+  while (bf!=NULL) {
+    sym=bf->sym; v=bf->val;
+    if (sym->cix!=vectorcp.cix && v!=UNBOUND && !sym_occurs(sym,body)) goto next;
+    if (v==UNBOUND) v=QUNBOUND;		/*special declaration marker*/
+    else if (sym->cix!=vectorcp.cix && !isclobox(v)) {
+      v=makelabref(QCLOBOX,v,NIL);
+      pointer_update(bf->val,v);}		/*the creator now uses the box too*/
+    rp[1]=v;
+    pr=cons(ctx,sym,v); rp[1]=pr;
+    rp[0]=cons(ctx,pr,rp[0]);
+  next:
+    if (bf==bf->lexblink) break;
+    bf=bf->lexblink;}
+  /* reverse so that the innermost frame comes first */
+  v=NIL; pr=rp[0];
+  while (iscons(pr)) { v=cons(ctx,ccar(pr),v); rp[1]=v; pr=ccdr(pr);}
+  ctx->vsp=rp;
+  return(v);}
+
+pointer heapify_flet(context *, struct fletframe *);
+
+pointer capture_fenv(ctx,ffp,body)
+register context *ctx;
+register struct fletframe *ffp;
+pointer body;		/*only functions occurring in body are captured*/
+{ pointer *rp=ctx->vsp, clo, pr, r;
+  vpush(NIL); vpush(NIL);	/* rp[0]: reversed list, rp[1]: work */
+  for (; ffp!=NULL; ffp=ffp->lexlink) {
+    if (!sym_occurs(ffp->name,body)) continue;
+    clo=heapify_flet(ctx,ffp); rp[1]=clo;
+    pr=cons(ctx,ffp->name,clo); rp[1]=pr;
+    rp[0]=cons(ctx,pr,rp[0]);}
+  r=NIL; pr=rp[0];
+  while (iscons(pr)) { r=cons(ctx,ccar(pr),r); rp[1]=r; pr=ccdr(pr);}
+  ctx->vsp=rp;
+  return(r);}
+
+/* make the closure of a flet/labels frame heap-resident (once) */
+pointer heapify_flet(ctx,ffp)
+register context *ctx;
+struct fletframe *ffp;
+{ pointer clo=ffp->fclosure, p, env, t;
+  pointer *spsave=ctx->vsp;
+  struct bindframe *bf;
+  struct fletframe *scope;
+  if (!iscons(clo) || ccar(clo)!=LAMCLOSURE) return(clo);
+  p=ccdr(ccdr(clo));		/* (ENV FENV formals . body) */
+  if (!isint(ccar(p))) return(clo);	/*already a heap closure*/
+  bf=(struct bindframe *)intval(ccar(p));
+  if (bf < (struct bindframe *)ctx->stack ||
+      (struct bindframe *)ctx->stacklimit < bf) bf=NULL;
+  scope=(struct fletframe *)intval(ccar(ccdr(p)));
+  env=makelabref(QCLOENV,NIL,NIL); vpush(env);
+  env->c.lab.label=QCLOENV;
+  t=cons(ctx,makeint(0),ccdr(ccdr(p))); vpush(t);
+  t=cons(ctx,env,t); vpush(t);
+  t=cons(ctx,ccar(ccdr(clo)),t); vpush(t);
+  t=cons(ctx,LAMCLOSURE,t); vpush(t);
+  pointer_update(ffp->fclosure,t);	/*recursive references now see this*/
+  pointer_update(env->c.lab.value,capture_benv(ctx,bf,ccdr(ccdr(p))));
+  pointer_update(env->c.lab.unsolved,capture_fenv(ctx,scope,ccdr(ccdr(p))));
+  ctx->vsp=spsave;
+  return(t);}
+
+/* push bindframes for a captured environment; returns the innermost frame */
+struct bindframe *rebuild_benv(ctx,lst)
+register context *ctx;
+pointer lst;
+{ struct bindframe *bfs=(struct bindframe *)ctx->vsp, *prev=NULL;
+  int n=0,i;
+  pointer p=lst;
+  while (iscons(p)) { n++; p=ccdr(p);}
+  if (n==0) return(NULL);
+  ctx->vsp += n*(sizeof(struct bindframe)/sizeof(pointer));
+  p=lst;
+  for (i=0; i<n; i++) {
+    bfs[i].sym=ccar(ccar(p));
+    bfs[i].val=ccdr(ccar(p));
+    if (bfs[i].val==QUNBOUND) bfs[i].val=UNBOUND;
+    bfs[i].lexblink=(i<n-1)?&bfs[i+1]:NULL;
+    bfs[i].dynblink=(i<n-1)?&bfs[i+1]:ctx->bindfp;
+    p=ccdr(p);}
+  return(&bfs[0]);}
+
+struct fletframe *rebuild_fenv(ctx,lst)
+register context *ctx;
+pointer lst;
+{ struct fletframe *ffs=(struct fletframe *)ctx->vsp;
+  int n=0,i;
+  pointer p=lst;
+  while (iscons(p)) { n++; p=ccdr(p);}
+  if (n==0) return(NULL);
+  ctx->vsp += n*(sizeof(struct fletframe)/sizeof(pointer));
+  p=lst;
+  for (i=0; i<n; i++) {
+    ffs[i].name=ccar(ccar(p));
+    ffs[i].fclosure=ccdr(ccar(p));
+    ffs[i].scope=(i<n-1)?&ffs[i+1]:NULL;
+    ffs[i].lexlink=(i<n-1)?&ffs[i+1]:NULL;
+    ffs[i].dynlink=ctx->fletfp;
+    p=ccdr(p);}
+  return(&ffs[0]);}
+
+/* (function (lambda ...)) in the interpreter */
+pointer make_heap_closure(ctx,funcname,lam)
+register context *ctx;
+pointer funcname,lam;	/* lam = (lambda formals . body) */
+{ pointer *spsave=ctx->vsp, env, t;
+  vpush(lam);
+  env=makelabref(QCLOENV,NIL,NIL); vpush(env);
+  env->c.lab.label=QCLOENV;
+  pointer_update(env->c.lab.value,capture_benv(ctx,ctx->bindfp,lam));
+  pointer_update(env->c.lab.unsolved,capture_fenv(ctx,ctx->fletfp,lam));
+  t=cons(ctx,makeint(0),ccdr(lam)); vpush(t);
+  t=cons(ctx,env,t); vpush(t);
+  t=cons(ctx,funcname,t); vpush(t);
+  t=cons(ctx,LAMCLOSURE,t);
+  ctx->vsp=spsave;
+  return(t);}
+
+/* #'name: a flet/labels function is made heap-resident before it escapes */
+pointer function_of_flet(ctx,name)
+register context *ctx;
+pointer name;
+{ struct fletframe *ffp=ctx->fletfp;
+  while (ffp!=NULL) {
+    if (ffp->name==name) return(heapify_flet(ctx,ffp));
+    ffp=ffp->lexlink;}
+  return(NULL);}
 
 int parsekeyparams(keyvec,actuals,noarg,results,allowotherkeys)
  /*for compiled codes*/
@@ -1491,7 +1654,8 @@ pointer form,fn;
 register pointer args;	/*or 'pointer *' */
 struct bindframe *env;
 int noarg;
-{ pointer func,formal,aval,ftype,result,*argp,hook;
+{ pointer func,formal,aval,ftype,result,*argp,hook,cloenv=NIL;
+  struct bindframe *bfsave=NULL;
   register struct callframe *vf=(struct callframe *)(ctx->vsp);
   struct specialbindframe *sbfps=ctx->sbindfp;
   register int n=0,i;
@@ -1601,12 +1765,15 @@ int noarg;
     if (ftype->c.sym.homepkg==keywordpkg) fn=ftype;	/*blockname=selector*/
     else if (ftype==LAMCLOSURE) {
       fn=ccar(func); func=ccdr(func);
-      env=(struct bindframe *)intval(ccar(func));
-      if (env < (struct bindframe *)ctx->stack ||
-	  (struct bindframe *)ctx->stacklimit < env) env=0;
+      if (iscloenv(ccar(func))) {	/*heap closure: frames are rebuilt below*/
+        cloenv=ccar(func); env=NULL; fenv=NULL;}
+      else {
+        env=(struct bindframe *)intval(ccar(func));
+        if (env < (struct bindframe *)ctx->stack ||
+	    (struct bindframe *)ctx->stacklimit < env) env=0;
+        /* ctx->fletfp=(struct fletframe *)intval(ccar(func)); */
+        fenv=(struct fletframe *)intval(ccar(ccdr(func)));}
       func=ccdr(func);
-      /* ctx->fletfp=(struct fletframe *)intval(ccar(func)); */
-      fenv=(struct fletframe *)intval(ccar(func)); 
       func=ccdr(func);}
     else if (ftype!=LAMBDA && ftype!=MACRO) error(E_LAMBDA);
     else env=NULL /*0 ????*/; 
@@ -1623,8 +1790,17 @@ int noarg;
       argp=(pointer *)args;
       if (ftype==MACRO) error(E_ILLFUNC);}
     GC_POINT;
-    if (ftype==LAMCLOSURE) { ctx->fletfp=fenv; }
+    if (ftype==LAMCLOSURE) {
+      if (cloenv!=NIL) {	/*after the arguments: push the captured frames*/
+        env=rebuild_benv(ctx,cloenv->c.lab.value);
+        fenv=rebuild_fenv(ctx,cloenv->c.lab.unsolved);
+        /* the rebuilt frames lie above the caller's frames on the stack;
+           make them the declaration-scope limit of funlambda (vbind checks
+           duplicated parameters only above that limit) */
+        if (env) { bfsave=ctx->bindfp; ctx->bindfp=env;} }
+      ctx->fletfp=fenv; }
     result=funlambda(ctx,fn,formal,func,argp,env,noarg);
+    if (bfsave) ctx->bindfp=bfsave;
     ctx->vsp=(pointer *)vf;
     ctx->callfp=vf->vlink;
     GC_POINT;

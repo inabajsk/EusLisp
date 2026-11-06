@@ -168,6 +168,7 @@ static pointer reploop(context *, char *);
 
 pointer ALLOWOTHERKEYS,K_ALLOWOTHERKEYS;
 pointer OPTIONAL,REST,KEY,AUX,MACRO,LAMBDA,LAMCLOSURE,COMCLOSURE;
+pointer QCLOBOX,QCLOENV,QCLOSUREMODE;
 pointer PRCIRCLE,PROBJECT,PRSTRUCTURE,PRCASE,PRLENGTH,PRLEVEL;
 pointer RANDSTATE,FEATURES,READBASE,PRINTBASE,QREADTABLE,QTERMIO;
 pointer GCMERGE,GCMARGIN, QLDENT;
@@ -601,6 +602,13 @@ static void initsymbols()
   MACRO=intern(ctx,"MACRO",5,lisppkg);
   FUNCTION=intern(ctx,"FUNCTION",8,lisppkg);
   LAMCLOSURE=intern(ctx,"LAMBDA-CLOSURE",14,lisppkg);
+  QCLOBOX=intern(ctx,"CLOSURE-BOX",11,syspkg);
+  QCLOENV=intern(ctx,"CLOSURE-ENV",11,syspkg);
+  /* *closure-mode*: t = closures of indefinite extent (heap environment),
+     nil = the original stack-based closures.  The interpreter checks it at
+     each (function (lambda ...)); the compiler checks it at compile time. */
+  QCLOSUREMODE=defvar(ctx,"*CLOSURE-MODE*",T,lisppkg);
+  export(QCLOSUREMODE,lisppkg);
   COMCLOSURE=intern(ctx,"COMPILED-CLOSURE",16,lisppkg);
   QDECLARE=intern(ctx,"DECLARE",7,lisppkg);
   QSPECIAL=intern(ctx,"SPECIAL",7,lisppkg);
@@ -760,17 +768,17 @@ static void initclasses()
 #if ARM // ARM uses entry2 in struct closure in eus.h
 		     4,"ENTRY2",
 #else
-		     3,
+		     4,
 #endif
-		     "ENV0","ENV1","ENV2");
+		     "ENV0","ENV1","ENV2","ENVVEC");
 #else
   CLOSURE=basicclass("CLOSURE",C_CODE,&closurecp,
 #if ARM // ARM uses entry2 in struct closure in eus.h
-		     3,"ENTRY2",
+		     4,"ENTRY2",
 #else
-		     2,
+		     3,
 #endif
-		     "ENV1","ENV2");
+		     "ENV1","ENV2","ENVVEC");
 #endif
   C_CLOSURE=speval(CLOSURE);
 /* 16    ---new for Solaris */

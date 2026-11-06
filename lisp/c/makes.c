@@ -521,7 +521,46 @@ pointer (*f)(context*,int,pointer*,pointer);
   clo->c.clo.env0=e0;
   clo->c.clo.env1=e1; /*makeint((int)e1>>2);*/
   clo->c.clo.env2=e2; /*makeint((int)e2>>2);*/
+  clo->c.clo.envvec=NIL;	/*env1/env2 point into the stack (downward only)*/
   return(clo);}
+
+/* makeclosure2: closure with indefinite extent (closure branch).
+   The argument frame argv[0..nargs) and the local frame local[0..nlocal) of
+   the creating function are copied into one heap vector ENVVEC, and env1/env2
+   point into that vector, so the compiled body can keep using the same
+   offsets.  Variables shared between the creator and the closure are boxed
+   by the compiler, so copying the frame copies only the box pointers.
+   Words that point into the Lisp stack (frame links etc.) are not Lisp
+   objects; they are replaced by NIL so the GC never follows them. */
+pointer makeclosure2(ctx,code,quote,f,e0,argv,nargs,local,nlocal)
+context *ctx;
+pointer code,quote,e0,*argv,*local;
+pointer (*f)(context*,int,pointer*,pointer);
+int nargs,nlocal;
+{ register pointer clo,vec,x;
+  register int i;
+  if (nargs<0) nargs=0;
+  if (nlocal<0) nlocal=0;
+  vec=makevector(C_VECTOR,nargs+nlocal);
+  for (i=0; i<nargs+nlocal; i++) {
+    x=(i<nargs)?argv[i]:(local?local[i-nargs]:NIL);
+    if (ispointer(x) && (pointer *)x>=ctx->stack && (pointer *)x<=ctx->stacklimit) x=NIL;
+    vec->c.vec.v[i]=x;}
+  vpush(vec);
+  clo=makeclosure(code,quote,f,e0,&vec->c.vec.v[0],&vec->c.vec.v[nargs]);
+  clo->c.clo.envvec=vec;
+  ctx->vsp--;
+  return(clo);}
+
+/* makeclosure3: like makeclosure2, but only argv is copied; the compiler
+   stores the captured local slots (boxes and local functions) into the
+   compact frame env2[0..nlocal) right after the closure is made. */
+pointer makeclosure3(ctx,code,quote,f,e0,argv,nargs,nlocal)
+context *ctx;
+pointer code,quote,e0,*argv;
+pointer (*f)(context*,int,pointer*,pointer);
+int nargs,nlocal;
+{ return(makeclosure2(ctx,code,quote,f,e0,argv,nargs,NULL,nlocal));}
 
 pointer makereadtable(ctx)
 register context *ctx;

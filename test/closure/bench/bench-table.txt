@@ -1,0 +1,11 @@
+bench     mode    orig   closure  affonso
+b-fib     interp  0.021  0.021    0.044
+b-mapc    interp  0.101  0.132    0.174
+b-wide    interp  0.108  0.246    0.110
+b-loop    interp  0.180  0.200    0.220
+b-labels  interp  0.124  0.153    0.330
+b-fib     comp    0.051  0.060    0.055
+b-mapc    comp    0.282  0.402    0.319
+b-wide    comp    0.414  0.578    0.479
+b-loop    comp    0.351  0.422    0.412
+b-labels  comp    0.185  0.234    0.214

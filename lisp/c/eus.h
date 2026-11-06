@@ -272,7 +272,8 @@ struct closure {
 #endif
     pointer env0;	/*upper closure link*/
     pointer *env1;	/*argument pointer:	argv*/
-    pointer *env2;};	/*local variable frame:	local*/
+    pointer *env2;	/*local variable frame:	local*/
+    pointer envvec;};	/*heap copy of argv+local (makeclosure2) or NIL*/
 
 struct stream {
     pointer plist;
@@ -655,6 +656,7 @@ extern pointer pkglist,lisppkg,keywordpkg,userpkg,syspkg,unixpkg,xpkg;
 extern pointer NIL,PACKAGE,T,QUOTE;
 extern pointer FUNCTION;
 extern pointer QDECLARE,QSPECIAL;
+extern pointer QCLOBOX,QCLOENV,QCLOSUREMODE;	/* heap closures (closure branch) */
 #if SunOS4_1 /* SELF is already used on SunOS 4.1.x. */
 extern pointer QSELF;
 #else
@@ -871,6 +873,9 @@ extern eusinteger_t intval(pointer p);
 #define pisclosure(p) (closurecp.cix<=(p)->cix && (p)->cix<=closurecp.sub)
 #define isclosure(p) (ispointer(p) && pisclosure(p))
 #define pislabref(p) (labrefcp.cix<=(p)->cix && (p)->cix<=labrefcp.sub)
+/* a box holding a captured variable: label-reference whose label is QCLOBOX */
+#define isclobox(p) (ispointer(p) && (p)!=UNBOUND && pislabref(p) && (p)->c.lab.label==QCLOBOX)
+#define iscloenv(p) (ispointer(p) && (p)!=UNBOUND && pislabref(p) && (p)->c.lab.label==QCLOENV)
 #define islabref(p) (ispointer(p) && pislabref(p))
 /* extended numbers */
 #define pisextnum(p) (extnumcp.cix<=(p)->cix && (p)->cix<=extnumcp.sub)
@@ -1105,6 +1110,8 @@ extern pointer prinx(context *, pointer, pointer);
 
 /*for compiled code*/
 extern pointer makeclosure(pointer,pointer,pointer(*)(context*,int,pointer*,pointer),pointer, pointer*, pointer*);
+extern pointer makeclosure2(context*,pointer,pointer,pointer(*)(context*,int,pointer*,pointer),pointer, pointer*, int, pointer*, int);
+extern pointer makeclosure3(context*,pointer,pointer,pointer(*)(context*,int,pointer*,pointer),pointer, pointer*, int, int);
 extern pointer fcall();
 extern pointer xcar(pointer), xcdr(pointer), xcadr(pointer);
 extern pointer *ovafptr(pointer,pointer);
