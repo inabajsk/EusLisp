@@ -25,7 +25,7 @@ that live in the heap, so they can be returned, stored and called later
   same as the original compiler's output (`makeclosure`, no boxes).
 * Closures already made keep working after the mode is changed.
 * With `nil`, `test/closure/run-tests.sh` gives exactly the same
-  PASS / FAIL / CRASH pattern as the original jskeus build (8 / 40).
+  PASS / FAIL / CRASH pattern as the original jskeus build (8 / 42).
 
 ## Interpreter (`lisp/c/eval.c`, `specials.c`)
 
@@ -67,7 +67,7 @@ that live in the heap, so they can be returned, stored and called later
 
 ## Tests
 
-* `test/closure.l` (unittest): 20 cases, interpreted and compiled.
+* `test/closure.l` (unittest): 21 cases, interpreted and compiled.
 * `test/closure/run-tests.sh <env.sh> eus <label>` runs every case in its
   own process (a crash does not hide the other cases), interpreted and
   compiled.  The same `closure-defs.l` also runs on other EusLisp builds.
@@ -77,9 +77,9 @@ Results (2026-11-06, WSL2 Ubuntu 24.04, x86_64):
 
 | build | closure cases (interp + comp) |
 |---|---|
-| jskeus master (EusLisp 9.32) | 8 / 40 |
-| this branch | 40 / 40 |
-| affonso-gui/EusLisp `eus10` | 40 / 40 |
+| jskeus master (EusLisp 9.32) | 8 / 42 |
+| this branch | 42 / 42 (`*closure-mode*` nil: 8 / 42, same as master) |
+| affonso-gui/EusLisp `eus10` | 42 / 42 |
 
 `test/*.l` of EusLisp and `irteus/test` give the same results as the
 original build.
