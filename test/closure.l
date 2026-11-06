@@ -8,6 +8,7 @@
 (setq *closure-dir*
       (concatenate string (or (car *loader-current-directory*) "./") "closure/"))
 (setq *closure-src* (concatenate string *closure-dir* "closure-defs.l"))
+(setq *closure-extra* (concatenate string *closure-dir* "closure-defs-extra.l"))
 
 (defun run-closure-cases (label)
   (dolist (c *closure-tests*)
@@ -18,14 +19,17 @@
 
 (deftest closure-interpreted
   (load *closure-src*)
+  (load *closure-extra*)
   (run-closure-cases "interp"))
 
 (deftest closure-compiled
   (let* ((tmp (format nil "/tmp/eus-closure-~A/" (unix:getpid)))
          (src (concatenate string tmp "closure-defs.l")))
-    (unix:system (format nil "mkdir -p ~A && cp ~A ~A" tmp *closure-src* src))
+    (unix:system (format nil "mkdir -p ~A && cp ~A ~A ~A" tmp *closure-src* *closure-extra* tmp))
     (compile-file src)
+    (compile-file (concatenate string tmp "closure-defs-extra.l"))
     (load (concatenate string tmp "closure-defs.so"))
+    (load (concatenate string tmp "closure-defs-extra.so"))
     (run-closure-cases "comp")
     (unix:system (format nil "rm -rf ~A" tmp))))
 

@@ -5,11 +5,12 @@ ENVSH=$1; EUSCMD=${2:-eus}; LABEL=${3:-run}
 . $ENVSH
 export TESTDIR=$(cd $(dirname $0); pwd)
 WORK=$TESTDIR/work-$LABEL; rm -rf $WORK; mkdir -p $WORK
-cp $TESTDIR/closure-defs.l $WORK/
+cp $TESTDIR/closure-defs.l $TESTDIR/closure-defs-extra.l $WORK/
 # CLOSURE_MODE=nil compiles and runs with *closure-mode* = nil (original closures)
 if [ "$CLOSURE_MODE" = "nil" ]; then SETMODE='(setq *closure-mode* nil)'; else SETMODE=''; fi
 export CLOSURE_MODE
 ( cd $WORK && echo "(progn $SETMODE (compile-file \"closure-defs.l\") (exit 0))" | $EUSCMD > compile.log 2>&1 )
+( cd $WORK && echo "(progn $SETMODE (load \"closure-defs.l\") (compile-file \"closure-defs-extra.l\") (exit 0))" | $EUSCMD > compile-extra.log 2>&1 )
 export TESTDIR=$WORK
 NAMES=$(sed -n "/setq \*closure-tests\*/,\$p" $WORK/closure-defs.l | grep -o "(test-[a-z0-9-]*" | tr -d "(")
 for MODE in interp comp; do

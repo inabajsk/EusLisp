@@ -397,9 +397,31 @@ Aを呼び出す前にBを再定義しなければならない。
 使用しなければならないならば、コンパイラやローダの
 {\em :entry}引数を別に指定すること。
 
-closureの使用には制限がある。
-closureの中の{\bf return-from}特殊書式と{\bf unwind-protect}の中のclean-up書式は
-いつも正しくコンパイルされるわけではない。
+\subsubsection{クロージャのコンパイル}
+
+コンパイル時に{\tt *closure-mode*}が T のとき、コンパイラは関数本体を
+コンパイルする前に、内側のクロージャ（{\tt \#'(lambda ...)}、{\bf flet}と
+{\bf labels}の定義）に現れる変数を集め、それぞれをスタックフレーム上の
+箱（cons セル）に入れる。クロージャは{\tt makeclosure3}で作られ、
+作った関数の箱と局所関数だけを持つ小さなフレームをヒープに確保する。
+\begin{verbatim}
+(defun make-counter () (let ((n 0)) #'(lambda () (setq n (1+ n)))))
+
+	local[0]= makeint((eusinteger_t)0L);
+	local[0]= cons(ctx,local[0],NIL); /*box*/
+	local[1]= makeclosure3(ctx,codevec,quotevec,CLO1,NIL,argv,0,1);
+	local[1]->c.clo.env2[0]=local[0];
+  ... CLO1 の中:
+	local[0]= env->c.clo.env2[0]->c.cons.car;
+\end{verbatim}
+クロージャの中で使われているのに捕捉されなかった変数（例えば、クロージャの
+ソースには現れない参照をマクロが生成する場合）はコンパイルエラーになる。
+{\bf flet}や{\bf labels}で定義した関数の本体は同じ名前のブロックで囲まれるので、
+その名前で{\bf return-from}を使うことができる。
+
+{\bf unwind-protect}のclean-up書式はスタックフレームを参照するクロージャとして
+コンパイルされる。clean-up書式の中で作ったクロージャを、関数が戻った後に
+使ってはならない。
 
 {\bf disassemble}は、実現されていない。
 コンパイルされたコードを解析するためには中間Cプログラムを見るかあるいは

@@ -4,6 +4,10 @@
   (if (equal mode "comp")
       (load (format nil "~A/closure-defs.so" (unix:getenv "TESTDIR")))
     (load (format nil "~A/closure-defs.l" (unix:getenv "TESTDIR")))))
+;; extra cases: if compiling them failed, only those cases fail
+(let ((f (format nil "~A/closure-defs-extra.~A" (unix:getenv "TESTDIR")
+                 (if (equal (unix:getenv "MODE") "comp") "so" "l"))))
+  (if (probe-file f) (load f)))
 (let* ((name (read-from-string (unix:getenv "TEST")))
        (ent (assoc name *closure-tests*))
        (got (funcall name)))

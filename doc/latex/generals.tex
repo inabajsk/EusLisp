@@ -652,26 +652,49 @@ Here is another example of what is called a funarg problem:
 (vector-sum #(1 2 3 4)) --> 10 
 \end{verbatim}
 
-EusLisp's closure cannot have indefinite extent:
-i.e. a closure can only survive as long as its outer extent is in effect.
-This means that a closure cannot be used for programming of ``generators".
-The following program does not work.
+\subsection{Closures}
+
+Closures are functions which inherit the lexical scope in which they were
+created.  Since the {\tt closure} version, EusLisp's closures have indefinite
+extent: a closure may be returned, stored and called after the function that
+created it has returned.  This holds both for interpreted and compiled code.
+Therefore closures can be used for programming of ``generators".
 
 \begin{verbatim}
-(proclaim '(special gen))
-(let ((index 0))
-   (setq gen #'(lambda () (setq index (1+ index)))))
-(funcall gen)
+(defun make-counter (&optional (index 0))
+   #'(lambda () (setq index (1+ index))))
+(setq gen (make-counter))
+(funcall gen) --> 1
+(funcall gen) --> 2
+
+(defun make-account (balance)
+   (list #'(lambda (x) (setq balance (+ balance x)))  ; both closures
+         #'(lambda () balance)))                      ; share balance
 \end{verbatim}
 
-However, the same purpose is accomplished by object oriented programming,
+Variables captured by a closure are stored in boxes shared by the function
+that created the closure and by every closure that refers to them, so an
+assignment by one of them is seen by the others.  Functions defined by
+{\bf flet} and {\bf labels} can also be returned with {\tt \#'name}.
+{\tt :closure} is in {\tt *features*}.
+
+The same purpose is also accomplished by object oriented programming,
 because an object can hold its own static variables:
 \begin{verbatim}
-(defclass generator object (index))
+(defclass generator :super object :slots (index))
 (defmethod generator
  (:next () (setq index (1+ index)))
  (:init (&optional (start 0)) (setq index start) self))
 (defvar gen (instance generator :init 0))
-(send gen :next)
+(send gen :next) --> 1
 \end{verbatim}
+
+\vardesc{*closure-mode*}{
+When T (default), {\bf function} creates closures of indefinite extent.
+When NIL, closures refer to the stack frame of the creating function as
+in the previous versions, and are valid only while that function is active.
+The interpreter refers to this variable each time a {\bf function} form is
+evaluated; the compiler refers to it at compile time, and code compiled with
+NIL is the same as the output of the previous compiler.}
+
 \newpage

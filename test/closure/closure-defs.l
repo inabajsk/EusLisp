@@ -164,6 +164,16 @@
   (setq *top-l* (list 1 2 3))
   (list (funcall *top-c*) (length *top-l*)))
 
+;; 22 a variable referenced only through a macro inside the closure
+(defmacro hidden-ref () 'hidden-var)
+(defun make-hidden ()
+  (let ((hidden-var 5) f)
+    (setq f #'(lambda () (setq hidden-var (+ (hidden-ref) 1))))
+    (setq hidden-var 10)
+    f))
+(defun test-macro-hidden ()
+  (let ((f (make-hidden))) (clobber 40) (list (funcall f) (funcall f))))
+
 (setq *closure-tests*
   '((test-counter (11 12 13))
     (test-shared 125)
@@ -185,4 +195,6 @@
     (test-special (1 2))
     (test-global 42)
     (test-compose 111)
-    (test-toplevel (3 3))))
+    (test-toplevel (3 3))
+    (test-macro-hidden (11 12))
+    (test-labels-block (-3 nil))))

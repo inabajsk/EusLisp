@@ -609,6 +609,9 @@ static void initsymbols()
      each (function (lambda ...)); the compiler checks it at compile time. */
   QCLOSUREMODE=defvar(ctx,"*CLOSURE-MODE*",T,lisppkg);
   export(QCLOSUREMODE,lisppkg);
+  { extern pointer QCAPTURESYMS, K_SYMBOLS_MARK;
+    QCAPTURESYMS=intern(ctx,"CLOSURE-CAPTURED-SYMBOLS",24,syspkg);
+    K_SYMBOLS_MARK=intern(ctx,"CLOSURE-SYMBOLS",15,syspkg);}
   COMCLOSURE=intern(ctx,"COMPILED-CLOSURE",16,lisppkg);
   QDECLARE=intern(ctx,"DECLARE",7,lisppkg);
   QSPECIAL=intern(ctx,"SPECIAL",7,lisppkg);

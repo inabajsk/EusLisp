@@ -261,6 +261,34 @@ register pointer sym,form;
     form=ccdr(form);}
   return(form==sym);}
 
+/* The symbols a closure body (fb = (formals . body)) can refer to.
+   When the compiler is loaded, sys::closure-captured-symbols walks the body
+   with macro expansion (and caches the result); the list is returned as
+   (:symbols . list).  Otherwise the body itself is returned and searched
+   textually by sym_occurs. */
+pointer QCAPTURESYMS, K_SYMBOLS_MARK;
+pointer capture_key(ctx,fb)
+register context *ctx;
+pointer fb;
+{ pointer r;
+  if (QCAPTURESYMS==0 || QCAPTURESYMS->c.sym.spefunc==UNBOUND) return(fb);
+  vpush(fb);
+  r=ufuncall(ctx,(ctx->callfp?ctx->callfp->form:NIL),QCAPTURESYMS,
+	     (pointer)(ctx->vsp-1),NULL,1);
+  ctx->vsp--;
+  vpush(r);
+  r=cons(ctx,K_SYMBOLS_MARK,r);
+  ctx->vsp--;
+  return(r);}
+
+int captured_p(sym,key)
+register pointer sym,key;
+{ if (iscons(key) && ccar(key)==K_SYMBOLS_MARK) {
+    key=ccdr(key);
+    while (iscons(key)) { if (ccar(key)==sym) return(1); key=ccdr(key);}
+    return(0);}
+  return(sym_occurs(sym,key));}
+
 pointer capture_benv(ctx,bf,body)
 register context *ctx;
 register struct bindframe *bf;
@@ -269,7 +297,7 @@ pointer body;		/*only variables occurring in body are captured*/
   vpush(NIL); vpush(NIL);	/* rp[0]: list (outermost first), rp[1]: work */
   while (bf!=NULL) {
     sym=bf->sym; v=bf->val;
-    if (sym->cix!=vectorcp.cix && v!=UNBOUND && !sym_occurs(sym,body)) goto next;
+    if (sym->cix!=vectorcp.cix && v!=UNBOUND && !captured_p(sym,body)) goto next;
     if (v==UNBOUND) v=QUNBOUND;		/*special declaration marker*/
     else if (sym->cix!=vectorcp.cix && !isclobox(v)) {
       v=makelabref(QCLOBOX,v,NIL);
@@ -295,7 +323,7 @@ pointer body;		/*only functions occurring in body are captured*/
 { pointer *rp=ctx->vsp, clo, pr, r;
   vpush(NIL); vpush(NIL);	/* rp[0]: reversed list, rp[1]: work */
   for (; ffp!=NULL; ffp=ffp->lexlink) {
-    if (!sym_occurs(ffp->name,body)) continue;
+    if (!captured_p(ffp->name,body)) continue;
     clo=heapify_flet(ctx,ffp); rp[1]=clo;
     pr=cons(ctx,ffp->name,clo); rp[1]=pr;
     rp[0]=cons(ctx,pr,rp[0]);}
@@ -326,8 +354,9 @@ struct fletframe *ffp;
   t=cons(ctx,ccar(ccdr(clo)),t); vpush(t);
   t=cons(ctx,LAMCLOSURE,t); vpush(t);
   pointer_update(ffp->fclosure,t);	/*recursive references now see this*/
-  pointer_update(env->c.lab.value,capture_benv(ctx,bf,ccdr(ccdr(p))));
-  pointer_update(env->c.lab.unsolved,capture_fenv(ctx,scope,ccdr(ccdr(p))));
+  { pointer key=capture_key(ctx,ccdr(ccdr(p))); vpush(key);
+    pointer_update(env->c.lab.value,capture_benv(ctx,bf,key));
+    pointer_update(env->c.lab.unsolved,capture_fenv(ctx,scope,key));}
   ctx->vsp=spsave;
   return(t);}
 
@@ -378,8 +407,9 @@ pointer funcname,lam;	/* lam = (lambda formals . body) */
   vpush(lam);
   env=makelabref(QCLOENV,NIL,NIL); vpush(env);
   env->c.lab.label=QCLOENV;
-  pointer_update(env->c.lab.value,capture_benv(ctx,ctx->bindfp,lam));
-  pointer_update(env->c.lab.unsolved,capture_fenv(ctx,ctx->fletfp,lam));
+  { pointer key=capture_key(ctx,ccdr(lam)); vpush(key);
+    pointer_update(env->c.lab.value,capture_benv(ctx,ctx->bindfp,key));
+    pointer_update(env->c.lab.unsolved,capture_fenv(ctx,ctx->fletfp,key));}
   t=cons(ctx,makeint(0),ccdr(lam)); vpush(t);
   t=cons(ctx,env,t); vpush(t);
   t=cons(ctx,funcname,t); vpush(t);

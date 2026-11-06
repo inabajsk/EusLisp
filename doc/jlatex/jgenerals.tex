@@ -638,26 +638,48 @@ lambda書式は、普通のリストデータと区別できないため、
 (vector-sum #(1 2 3 4)) --> 10 
 \end{verbatim}
 
-EusLispのclosureは、不定な大きさを持つことができない。
-すなわち、closureはその外側の大きさで可能な大きさまで持つことができる。
-これはclosureが'generators'のプログラミングのために使用されないことを意味する。
-次のプログラムは何もしない。
+\subsection{クロージャ}
+
+クロージャは、作られた場所のレキシカルスコープを引き継ぐ関数である。
+{\tt closure} 版以降の EusLisp のクロージャは無限のエクステントを持つ。
+すなわち、クロージャを作った関数が戻った後でも、そのクロージャを返したり、
+保存したり、呼び出したりできる。これはインタプリタでもコンパイルされた
+コードでも同じである。したがって、クロージャで「生成器」を書くことができる。
 
 \begin{verbatim}
-(proclaim '(special gen))
-(let ((index 0))
-   (setq gen #'(lambda () (setq index (1+ index)))))
-(funcall gen)
+(defun make-counter (&optional (index 0))
+   #'(lambda () (setq index (1+ index))))
+(setq gen (make-counter))
+(funcall gen) --> 1
+(funcall gen) --> 2
+
+(defun make-account (balance)
+   (list #'(lambda (x) (setq balance (+ balance x)))  ; 2つのクロージャが
+         #'(lambda () balance)))                      ; balance を共有する
 \end{verbatim}
 
-しかしながら、その同じ目的がオブジェクト指向プログラミングで実現できる。
-なぜなら、オブジェクトはそれ自身の固定変数を持つことができるためである。
+クロージャが捕捉した変数は「箱」に入れられ、クロージャを作った関数と、
+その変数を参照するすべてのクロージャで共有される。そのため、どれかが
+代入した値は他からも見える。{\bf flet}や{\bf labels}で定義した関数も
+{\tt \#'名前}で返すことができる。{\tt *features*}には{\tt :closure}が入る。
+
+同じ目的は、オブジェクト指向プログラミングでも実現できる。
+オブジェクトはそれ自身の変数を持つことができるためである。
 \begin{verbatim}
-(defclass generator object (index))
+(defclass generator :super object :slots (index))
 (defmethod generator
  (:next () (setq index (1+ index)))
  (:init (&optional (start 0)) (setq index start) self))
 (defvar gen (instance generator :init 0))
-(send gen :next)
+(send gen :next) --> 1
 \end{verbatim}
+
+\vardesc{*closure-mode*}{
+T（既定値）のとき、{\bf function}は無限のエクステントを持つクロージャを作る。
+NIL のときは、従来の版と同じく、クロージャは作った関数のスタックフレームを参照し、
+その関数が実行中の間だけ有効である。
+インタプリタは{\bf function}書式を評価するたびにこの変数を参照し、
+コンパイラはコンパイル時に参照する。NIL でコンパイルしたコードは
+従来のコンパイラの出力と同じである。}
+
 \newpage
